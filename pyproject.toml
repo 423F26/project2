@@ -1,0 +1,20 @@
+[project]
+name = "ml-guitar-pedal"
+version = "0.1.0"
+description = "Prototype pitch classifier for clean guitar tones."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=2.4.6",
+    "tqdm>=4.70.1",
+]
+
+[project.scripts]
+pedal = "ml_guitar_pedal.cli:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["ml_guitar_pedal*"]
