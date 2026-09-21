@@ -11,12 +11,24 @@ from pathlib import Path
 from ml_guitar_pedal.audio import read_wav_mono
 from ml_guitar_pedal.cli import InteractiveState, build_parser, handle_interactive_command
 from ml_guitar_pedal.dataset import midi_to_note
+from ml_guitar_pedal.demo import matching_blues_file
 from ml_guitar_pedal.features import correct_octave_from_even_harmonics, extract_features
 from ml_guitar_pedal.model import KnnPitchClassifier, TrainingExample
 from ml_guitar_pedal.streaming import StreamingFrameBuffer
 
 
 class PitchClassifierTests(unittest.TestCase):
+    def test_demo_selects_matching_note_and_pickup(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            blues_dir = Path(temp_dir)
+            for pickup, filename in (("Bridge", "6-5.wav"), ("Bridge", "5-0.wav"), ("Neck", "5-0.wav")):
+                folder = blues_dir / pickup
+                folder.mkdir(exist_ok=True)
+                (folder / filename).touch()
+
+            self.assertEqual(matching_blues_file("A2", blues_dir, "Bridge"), blues_dir / "Bridge/5-0.wav")
+            self.assertEqual(matching_blues_file("A2", blues_dir, "Neck"), blues_dir / "Neck/5-0.wav")
+
     def test_midi_to_note_uses_standard_guitar_reference_points(self) -> None:
         self.assertEqual(midi_to_note(40), "E2")
         self.assertEqual(midi_to_note(45), "A2")

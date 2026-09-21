@@ -23,6 +23,7 @@ from ml_guitar_pedal.model import (
     train_test_split,
 )
 from ml_guitar_pedal.streaming import frames_from_signal
+from ml_guitar_pedal.live import live_command
 
 TARGETS = ("note", "midi", "pitch-class", "string-fret")
 DEFAULT_DATA_PATH = Path("data/clean")
@@ -86,6 +87,19 @@ def build_parser() -> argparse.ArgumentParser:
     predict_parser.add_argument("--max-rate", type=int, default=DEFAULT_MAX_SAMPLE_RATE)
     predict_parser.set_defaults(func=predict_command)
 
+    live_parser = subparsers.add_parser("live", help="Classify live guitar input using PipeWire (Linux).")
+    live_parser.add_argument("--model", type=Path, default=DEFAULT_MODEL_PATH)
+    live_parser.add_argument("--device", help="Input name or description; defaults to the connected iRig.")
+    live_parser.add_argument("--list-devices", action="store_true")
+    live_parser.add_argument("--seconds", type=float, default=0, help="Stop after this many seconds; 0 runs until Ctrl+C.")
+    live_parser.add_argument("--gate-db", type=float, default=-50, help="Minimum signal RMS in dBFS.")
+    live_parser.add_argument("--min-confidence", type=float, default=0.8, help="Minimum YIN pitch confidence (0..1).")
+    live_parser.set_defaults(func=live_command)
+
+    gui_parser = subparsers.add_parser("gui", help="Open the live note graph in Tkinter.")
+    gui_parser.add_argument("--model", type=Path, default=DEFAULT_MODEL_PATH)
+    gui_parser.set_defaults(func=gui_command)
+
     interactive_parser = subparsers.add_parser("interactive", help="Open an interactive pitch-classifier shell.")
     interactive_parser.add_argument("--data", type=Path, default=DEFAULT_DATA_PATH)
     interactive_parser.add_argument("--model", type=Path, default=DEFAULT_MODEL_PATH)
@@ -110,6 +124,11 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_parser.set_defaults(func=benchmark_command)
 
     return parser
+
+
+def gui_command(args: argparse.Namespace) -> None:
+    from ml_guitar_pedal.gui import launch
+    launch(args.model)
 
 
 def scan_command(args: argparse.Namespace) -> None:
@@ -291,6 +310,12 @@ def handle_interactive_command(raw_command: str, state: InteractiveState) -> Non
         print_interactive_help()
     elif command == "settings":
         print_interactive_settings(state)
+    elif command == "gui":
+        gui_command(argparse.Namespace(model=state.model))
+    elif command == "live":
+        live_args = build_parser().parse_args(["live", "--model", str(state.model), *args])
+        live_args.command = "interactive"
+        live_command(live_args)
     elif command == "scan":
         scan_command(argparse.Namespace(data=state.data, target=state.target))
     elif command == "train":
@@ -375,6 +400,8 @@ def print_interactive_help() -> None:
     print("  scan")
     print("  train")
     print("  predict <wav> [wav ...]")
+    print("  live [--list-devices | --device NAME] [--gate-db -50]")
+    print("  gui")
     print("  benchmark [iterations]")
     print("  data <path>")
     print("  model <path>")
