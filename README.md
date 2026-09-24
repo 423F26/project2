@@ -3,6 +3,16 @@
 Prototype tooling for a future ML-based guitar pedal. The first milestone is a
 pitch classifier for the labeled clean-tone recordings under `data/clean/`.
 
+# audio to midi setup
+alsamixer - for volume
+
+start fluidsynth
+fluidsynth -a alsa -o audio.alsa.device=hw:1,0 /usr/share/sounds/sf2/TimGM6mb.sf2
+
+connect midi
+aconnect 14:0 128:0
+
+
 ## Setup
 
 ```bash
