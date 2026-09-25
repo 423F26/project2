@@ -109,7 +109,16 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_parser.add_argument("--stream-hop", type=float, default=DEFAULT_STREAM_HOP_SECONDS, help="Streaming hop size in seconds.")
     benchmark_parser.set_defaults(func=benchmark_command)
 
+    midi_parser = subparsers.add_parser("audio-to-midi", help="Trigger MIDI notes from live ALSA audio volume.")
+    midi_parser.set_defaults(func=audio_to_midi_command)
+
     return parser
+
+
+def audio_to_midi_command(args: argparse.Namespace) -> None:
+    from ml_guitar_pedal.audio_to_midi import main
+
+    main()
 
 
 def scan_command(args: argparse.Namespace) -> None:

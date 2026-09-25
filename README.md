@@ -3,21 +3,35 @@
 Prototype tooling for a future ML-based guitar pedal. The first milestone is a
 pitch classifier for the labeled clean-tone recordings under `data/clean/`.
 
-# audio to midi setup
-alsamixer - for volume
-
-start fluidsynth
-fluidsynth -a alsa -o audio.alsa.device=hw:1,0 /usr/share/sounds/sf2/TimGM6mb.sf2
-
-connect midi
-aconnect 14:0 128:0
-
-
 ## Setup
 
 ```bash
 uv sync
 ```
+
+## Live audio to MIDI
+
+```bash
+uv run pedal audio-to-midi
+```
+
+This uses Linux ALSA's `arecord` (provided by `alsa-utils`) and the first
+available MIDI output port. It captures stereo S32_LE audio from `hw:2,0` at
+44,100 Hz in 1,024-frame blocks. Volume above 0.03 triggers MIDI note 60 (C4)
+at velocity 100; volume below 0.015 releases it. This is a fixed-note volume
+trigger, not pitch-to-MIDI transcription. Press Ctrl+C to stop.
+
+Use `alsamixer` to adjust input volume. For FluidSynth playback, start a synth
+in another terminal (adjust the audio device and SoundFont path as needed):
+
+```bash
+fluidsynth -a alsa -o audio.alsa.device=hw:1,0 /usr/share/sounds/sf2/TimGM6mb.sf2
+aconnect -l
+aconnect 14:0 128:0
+```
+
+Use the actual source and destination port IDs shown by `aconnect -l`.
+You can also run the module: `uv run python -m ml_guitar_pedal.audio_to_midi`.
 
 ## Dataset
 
