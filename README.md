@@ -1,13 +1,72 @@
 # ML Guitar Pedal
 
-Prototype tooling for a future ML-based guitar pedal. The first milestone is a
-pitch classifier for the labeled clean-tone recordings under `data/clean/`.
+Live Raspberry Pi guitar effects, plus pitch-classifier tooling for the labeled
+clean-tone recordings under `data/clean/`.
 
 ## Setup
 
 ```bash
 uv sync
 ```
+
+## Live guitar effect
+
+Connect a USB audio interface with a guitar input and headphone/line output, then run:
+
+```bash
+uv run pedal effect --list-devices
+uv run pedal effect
+```
+
+### Browser demo over SSH
+
+From the computer connected to the Pi, run:
+
+```bash
+ssh -F ~/.ssh/config -L 8765:127.0.0.1:8765 pi 'cd /root/project2 && uv run pedal demo-ui'
+```
+
+Keep that SSH terminal open and visit `http://127.0.0.1:8765` in a browser.
+The page has a clean/effect button and a live effect-amount slider. The demo
+uses the running pedal if one is already active, or starts it if needed. When
+the SSH command ends, it stops only an effect process that it started itself.
+
+The `effect` command processes the guitar input with overdrive and a tone filter,
+then plays it through the interface output. It chooses the first capture device
+and its matching playback device when available. To select devices explicitly:
+
+```bash
+uv run pedal effect --input plughw:1,0 --output plughw:1,0 --block 128 --drive 20 --tone 3000 --mix 1 --level 0.5
+```
+
+While the effect is running, use another terminal on the Pi to switch instantly:
+
+```bash
+uv run pedal mode toggle  # switch clean/effect
+uv run pedal mode clean   # clean guitar
+uv run pedal mode effect  # overdrive
+uv run pedal mode         # show current mode
+```
+
+The change fades over 10 ms to avoid a click, and audio keeps streaming.
+
+For a physical toggle on a Raspberry Pi 3, connect a normally open momentary
+switch between GPIO17 (physical header pin 11) and ground (physical pin 9).
+The internal pull-up is enabled in software; do not connect a voltage pin to the
+switch. Run the listener in a second terminal while `pedal effect` runs:
+
+```bash
+uv run pedal footswitch
+```
+
+Each press switches between clean and overdrive. The listener uses `gpiomon`
+from `libgpiod` and a 50 ms debounce period.
+
+The default 128-frame block reduces delay; increase `--block` to 256 or 512 if
+audio breaks up. Add `--meter` to print input level and ALSA recovery counts.
+Press Ctrl+C to stop. A passive analog iRig connected to the Pi's 3.5 mm jack cannot work as
+an input because the Raspberry Pi 3 jack only provides audio output; use a USB
+audio interface with a guitar input in that case.
 
 ## Live audio to MIDI
 

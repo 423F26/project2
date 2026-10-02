@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import shlex
+import sys
 import time
 from collections import Counter
 from dataclasses import dataclass
@@ -41,6 +43,15 @@ RASPBERRY_PI_TARGET_MS = 30.0
 
 
 def main() -> None:
+    live_commands = {
+        "effect": "ml_guitar_pedal.effect",
+        "mode": "ml_guitar_pedal.control",
+        "footswitch": "ml_guitar_pedal.footswitch",
+        "demo-ui": "ml_guitar_pedal.demo_ui",
+    }
+    if len(sys.argv) > 1 and sys.argv[1] in live_commands:
+        importlib.import_module(live_commands[sys.argv[1]]).main(sys.argv[2:])
+        return
     parser = build_parser()
     args = parser.parse_args()
     if hasattr(args, "func"):
@@ -111,6 +122,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     midi_parser = subparsers.add_parser("audio-to-midi", help="Trigger MIDI notes from live ALSA audio volume.")
     midi_parser.set_defaults(func=audio_to_midi_command)
+
+    subparsers.add_parser("effect", help="Play live guitar through an overdrive effect.")
+    subparsers.add_parser("mode", help="Switch the running effect between clean and overdrive.")
+    subparsers.add_parser("footswitch", help="Toggle the live effect from a GPIO17 momentary switch.")
+    subparsers.add_parser("demo-ui", help="Control the live effect from a local browser over SSH.")
 
     return parser
 
