@@ -7,4 +7,4 @@
 | ALSA stream, socket protocol, GPIO, and browser control | [Live audio and control](live-audio.md) |
 | Dataset, feature, model, and benchmark behavior | [Classifier internals](classifier.md) |
 
-The [agile artifact audit](../agile/README.md) records where the original planning spreadsheets differ from implemented or verified behavior.
+The [agile plan](../agile/README.md) links the current product vision and ESOF timeline. Its proposed milestones are separate from implemented or verified behavior.

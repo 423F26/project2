@@ -10,7 +10,7 @@ note from volume; it does not transcribe pitch.
 
 - [User guides](docs/user/README.md): setup, live effect, pitch classifier, and audio-to-MIDI.
 - [Developer guides](docs/dev/README.md): architecture, development checks, live control, and classifier internals.
-- [Agile artifact audit](docs/agile/README.md): what the planning spreadsheets record and how their goals compare with current code.
+- [Agile plan](docs/agile/README.md): the current project backlog, ESOF-aligned sprint plan, and burndown.
 
 ## Requirements and setup
 
@@ -257,5 +257,5 @@ The tests cover audio and feature extraction, model behavior, effect
 processing, local mode control, and CLI defaults. They do not exercise physical
 ALSA, GPIO, MIDI, or browser hardware paths. See
 [the architecture guide](docs/dev/architecture.md) for the module and data-flow
-map. The [agile artifact audit](docs/agile/README.md) explains the planning
-spreadsheets and their limits.
+map. The [agile plan](docs/agile/README.md) links the current planning
+spreadsheets and explains their limits.

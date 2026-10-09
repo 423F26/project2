@@ -18,4 +18,4 @@
 
 `benchmark` preloads up to eight WAV files unless paths are supplied. It prepares full signals and overlapping frames before timing. The timed paths cover full-signal feature extraction plus prediction, frame feature extraction plus prediction, and classifier-only prediction. `--include-io` adds a separate WAV-read, feature, and prediction measurement. Defaults are 100 iterations, five warmup calls, 64 ms frames, and 32 ms hops.
 
-The CLI prints a p95-below-30-ms check for classifier computation. It does not test ALSA capture/playback, real-time scheduling, or total input-to-output delay. The product's immediate minimum acceptable latency target is 30 ms and the long-term goal is 10 ms. Their measurement method still needs to be defined; see the [agile audit](../agile/README.md).
+The CLI prints a p95-below-30-ms check for classifier computation. It does not test ALSA capture/playback, real-time scheduling, or total input-to-output delay. The product's immediate minimum acceptable latency target is 30 ms and the long-term goal is 10 ms. Their measurement method still needs to be defined; see the [agile plan](../agile/README.md).
