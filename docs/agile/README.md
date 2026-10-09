@@ -1,8 +1,18 @@
 # Agile artifact audit
 
-This directory contains two spreadsheet snapshots of project planning. They do not record completed sprint work or verify current product performance. Treat the code and tests as evidence of implemented behavior, and record new sprint status or measured latency only after the project team supplies it.
+This directory preserves two original spreadsheet snapshots and provides a separate [full-product vision plan](vision/). The original files do not record completed sprint work or verify current product performance. Treat the code and tests as evidence of implemented behavior, and record new sprint status or measured latency only after the project team supplies it.
 
-## What the workbooks contain
+## Full-product vision workbooks
+
+| Workbook | Purpose |
+| --- | --- |
+| [Project backlog](vision/project-backlog-vision.xlsx) | Thirty proposed outcomes with acceptance evidence and dependency IDs. MVP and final horizons are separate. Owner and status fields are blank. |
+| [Sprint backlog](vision/sprint-backlog-vision.xlsx) | Proposed eight-sprint sequence. Every project backlog ID appears once, with a sprint goal and exit evidence. Dates, owners, and status remain open. |
+| [Burndown plan](vision/burndown-vision.xlsx) | Planned count of remaining items by sprint. Counts are unweighted items, not effort estimates. Actual remaining is blank until reviewed. |
+
+These files describe the intended Raspberry Pi pedal: screen and player UI, dedicated GPIO interface circuit and PCB, 3D-printed case, guitar audio interface, presets, several effects including an ML audio effect, reliable startup, and validation on hardware. The 30 ms immediate minimum acceptable target is a gate in sprint 5; the 10 ms long-term goal is planned for sprint 7. The measurement method and results still need to be recorded. Project IDs connect the two backlogs; the burndown's assigned-item counts must be updated if sprint assignments change.
+
+## What the original workbooks contain
 
 | Artifact | Recorded content | Limit |
 | --- | --- | --- |
