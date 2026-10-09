@@ -1,0 +1,8 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "pcm1863")(type "Legacy")(uri "${KIPRJMOD}/ul_PCM1863DBT/KiCAD/2020-09-29_23-30-00/2020-09-29_23-30-00.lib")(options "")(descr "pcm1863"))
+  (lib (name "zynthiandac")(type "Legacy")(uri "${KIPRJMOD}/pcm5122.lib")(options "")(descr ""))
+  (lib (name "conn_02x20")(type "Legacy")(uri "${KIPRJMOD}/sym_lib/conn_02x20.lib")(options "")(descr ""))
+  (lib (name "pcm5242")(type "Legacy")(uri "${KIPRJMOD}/ul_PCM5242RHBR/KiCAD/2020-10-18_16-58-23/2020-10-18_16-58-23.lib")(options "")(descr ""))
+  (lib (name "zynthiandac-rescue")(type "Legacy")(uri "${KIPRJMOD}/piADAC-rescue.lib")(options "")(descr ""))
+)
