@@ -40,32 +40,29 @@ DEFAULT_BENCHMARK_LIMIT = 8
 DEFAULT_STREAM_FRAME_SECONDS = 0.064
 DEFAULT_STREAM_HOP_SECONDS = 0.032
 RASPBERRY_PI_TARGET_MS = 30.0
+LIVE_COMMANDS = {
+    "effect": ("ml_guitar_pedal.effect", "Play live guitar through overdrive or fuzz."),
+    "mode": ("ml_guitar_pedal.control", "Switch clean/effect mode or select overdrive/fuzz."),
+    "footswitch": ("ml_guitar_pedal.footswitch", "Toggle the live effect from a GPIO17 momentary switch."),
+    "demo-ui": ("ml_guitar_pedal.demo_ui", "Control the live effect from a local browser over SSH."),
+}
 
 
 def main() -> None:
-    live_commands = {
-        "effect": "ml_guitar_pedal.effect",
-        "mode": "ml_guitar_pedal.control",
-        "footswitch": "ml_guitar_pedal.footswitch",
-        "demo-ui": "ml_guitar_pedal.demo_ui",
-    }
-    if len(sys.argv) > 1 and sys.argv[1] in live_commands:
-        importlib.import_module(live_commands[sys.argv[1]]).main(sys.argv[2:])
+    if len(sys.argv) > 1 and sys.argv[1] in LIVE_COMMANDS:
+        importlib.import_module(LIVE_COMMANDS[sys.argv[1]][0]).main(sys.argv[2:])
         return
-    parser = build_parser()
-    args = parser.parse_args()
-    if hasattr(args, "func"):
-        args.func(args)
-    else:
-        interactive_command(
-            argparse.Namespace(
-                data=DEFAULT_DATA_PATH,
-                model=DEFAULT_MODEL_PATH,
-                start=DEFAULT_START_SECONDS,
-                duration=DEFAULT_DURATION_SECONDS,
-                max_rate=DEFAULT_MAX_SAMPLE_RATE,
-            )
-        )
+    args = build_parser().parse_args(sys.argv[1:] or ["interactive"])
+    args.func(args)
+
+
+def _add_analysis_options(parser: argparse.ArgumentParser, *, data: bool = False) -> None:
+    if data:
+        parser.add_argument("--data", type=Path, default=DEFAULT_DATA_PATH)
+    parser.add_argument("--model", type=Path, default=DEFAULT_MODEL_PATH)
+    parser.add_argument("--start", type=float, default=DEFAULT_START_SECONDS, help="Seconds to skip at the start of each WAV.")
+    parser.add_argument("--duration", type=float, default=DEFAULT_DURATION_SECONDS, help="Seconds of audio to analyze.")
+    parser.add_argument("--max-rate", type=int, default=DEFAULT_MAX_SAMPLE_RATE, help="Maximum sample rate used for features.")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -78,44 +75,29 @@ def build_parser() -> argparse.ArgumentParser:
     scan_parser.set_defaults(func=scan_command)
 
     train_parser = subparsers.add_parser("train", help="Train and evaluate a KNN pitch classifier.")
-    train_parser.add_argument("--data", type=Path, default=DEFAULT_DATA_PATH)
-    train_parser.add_argument("--model", type=Path, default=DEFAULT_MODEL_PATH)
+    _add_analysis_options(train_parser, data=True)
     train_parser.add_argument("--target", choices=TARGETS, default="note")
     train_parser.add_argument("--k", type=int, default=DEFAULT_K)
     train_parser.add_argument("--test-size", type=float, default=DEFAULT_TEST_SIZE)
     train_parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
-    train_parser.add_argument("--start", type=float, default=DEFAULT_START_SECONDS, help="Seconds to skip at the start of each WAV.")
-    train_parser.add_argument("--duration", type=float, default=DEFAULT_DURATION_SECONDS, help="Seconds of audio to analyze.")
-    train_parser.add_argument("--max-rate", type=int, default=DEFAULT_MAX_SAMPLE_RATE, help="Maximum sample rate used for features.")
     train_parser.set_defaults(func=train_command)
 
     predict_parser = subparsers.add_parser("predict", help="Predict pitch labels for one or more WAV files.")
     predict_parser.add_argument("paths", type=Path, nargs="+")
-    predict_parser.add_argument("--model", type=Path, default=DEFAULT_MODEL_PATH)
-    predict_parser.add_argument("--start", type=float, default=DEFAULT_START_SECONDS)
-    predict_parser.add_argument("--duration", type=float, default=DEFAULT_DURATION_SECONDS)
-    predict_parser.add_argument("--max-rate", type=int, default=DEFAULT_MAX_SAMPLE_RATE)
+    _add_analysis_options(predict_parser)
     predict_parser.set_defaults(func=predict_command)
 
     interactive_parser = subparsers.add_parser("interactive", help="Open an interactive pitch-classifier shell.")
-    interactive_parser.add_argument("--data", type=Path, default=DEFAULT_DATA_PATH)
-    interactive_parser.add_argument("--model", type=Path, default=DEFAULT_MODEL_PATH)
-    interactive_parser.add_argument("--start", type=float, default=DEFAULT_START_SECONDS)
-    interactive_parser.add_argument("--duration", type=float, default=DEFAULT_DURATION_SECONDS)
-    interactive_parser.add_argument("--max-rate", type=int, default=DEFAULT_MAX_SAMPLE_RATE)
+    _add_analysis_options(interactive_parser, data=True)
     interactive_parser.set_defaults(func=interactive_command)
 
     benchmark_parser = subparsers.add_parser("benchmark", help="Measure pitch-classification latency.")
     benchmark_parser.add_argument("paths", type=Path, nargs="*", help="Optional WAV files to benchmark.")
-    benchmark_parser.add_argument("--data", type=Path, default=DEFAULT_DATA_PATH)
-    benchmark_parser.add_argument("--model", type=Path, default=DEFAULT_MODEL_PATH)
+    _add_analysis_options(benchmark_parser, data=True)
     benchmark_parser.add_argument("--iterations", type=int, default=DEFAULT_BENCHMARK_ITERATIONS)
     benchmark_parser.add_argument("--warmup", type=int, default=5)
     benchmark_parser.add_argument("--limit", type=int, default=DEFAULT_BENCHMARK_LIMIT, help="Dataset files to cycle through when no paths are given.")
     benchmark_parser.add_argument("--include-io", action="store_true", help="Also benchmark WAV read + feature extraction + classifier.")
-    benchmark_parser.add_argument("--start", type=float, default=DEFAULT_START_SECONDS)
-    benchmark_parser.add_argument("--duration", type=float, default=DEFAULT_DURATION_SECONDS)
-    benchmark_parser.add_argument("--max-rate", type=int, default=DEFAULT_MAX_SAMPLE_RATE)
     benchmark_parser.add_argument("--stream-frame", type=float, default=DEFAULT_STREAM_FRAME_SECONDS, help="Streaming frame size in seconds.")
     benchmark_parser.add_argument("--stream-hop", type=float, default=DEFAULT_STREAM_HOP_SECONDS, help="Streaming hop size in seconds.")
     benchmark_parser.set_defaults(func=benchmark_command)
@@ -123,10 +105,8 @@ def build_parser() -> argparse.ArgumentParser:
     midi_parser = subparsers.add_parser("audio-to-midi", help="Trigger MIDI notes from live ALSA audio volume.")
     midi_parser.set_defaults(func=audio_to_midi_command)
 
-    subparsers.add_parser("effect", help="Play live guitar through an overdrive effect.")
-    subparsers.add_parser("mode", help="Switch the running effect between clean and overdrive.")
-    subparsers.add_parser("footswitch", help="Toggle the live effect from a GPIO17 momentary switch.")
-    subparsers.add_parser("demo-ui", help="Control the live effect from a local browser over SSH.")
+    for name, (_, help_text) in LIVE_COMMANDS.items():
+        subparsers.add_parser(name, help=help_text)
 
     return parser
 
@@ -285,25 +265,21 @@ def interactive_command(args: argparse.Namespace) -> None:
             print(f"error: {error}")
 
 
+@dataclass
 class InteractiveState:
-    def __init__(
-        self,
-        *,
-        data: Path,
-        model: Path,
-        start: float,
-        duration: float,
-        max_rate: int,
-    ) -> None:
-        self.data = data
-        self.model = model
-        self.start = start
-        self.duration = duration
-        self.max_rate = max_rate
-        self.target = "note"
-        self.k = DEFAULT_K
-        self.test_size = DEFAULT_TEST_SIZE
-        self.seed = DEFAULT_SEED
+    data: Path
+    model: Path
+    start: float
+    duration: float
+    max_rate: int
+    target: str = "note"
+    k: int = DEFAULT_K
+    test_size: float = DEFAULT_TEST_SIZE
+    seed: int = DEFAULT_SEED
+
+
+def _interactive_args(state: InteractiveState, **overrides: object) -> argparse.Namespace:
+    return argparse.Namespace(**{**vars(state), **overrides})
 
 
 def handle_interactive_command(raw_command: str, state: InteractiveState) -> None:
@@ -317,51 +293,25 @@ def handle_interactive_command(raw_command: str, state: InteractiveState) -> Non
     elif command == "settings":
         print_interactive_settings(state)
     elif command == "scan":
-        scan_command(argparse.Namespace(data=state.data, target=state.target))
+        scan_command(_interactive_args(state))
     elif command == "train":
-        train_command(
-            argparse.Namespace(
-                data=state.data,
-                model=state.model,
-                target=state.target,
-                k=state.k,
-                test_size=state.test_size,
-                seed=state.seed,
-                start=state.start,
-                duration=state.duration,
-                max_rate=state.max_rate,
-            )
-        )
+        train_command(_interactive_args(state))
     elif command == "predict":
         if not args:
             raise ValueError("predict needs at least one WAV path")
-        predict_command(
-            argparse.Namespace(
-                paths=[Path(path) for path in args],
-                model=state.model,
-                start=state.start,
-                duration=state.duration,
-                max_rate=state.max_rate,
-            )
-        )
+        predict_command(_interactive_args(state, paths=[Path(path) for path in args]))
     elif command == "benchmark":
         iterations = int(args[0]) if args else DEFAULT_BENCHMARK_ITERATIONS
-        benchmark_command(
-            argparse.Namespace(
-                paths=[],
-                data=state.data,
-                model=state.model,
-                iterations=iterations,
-                warmup=5,
-                limit=DEFAULT_BENCHMARK_LIMIT,
-                include_io=False,
-                start=state.start,
-                duration=state.duration,
-                max_rate=state.max_rate,
-                stream_frame=DEFAULT_STREAM_FRAME_SECONDS,
-                stream_hop=DEFAULT_STREAM_HOP_SECONDS,
-            )
-        )
+        benchmark_command(_interactive_args(
+            state,
+            paths=[],
+            iterations=iterations,
+            warmup=5,
+            limit=DEFAULT_BENCHMARK_LIMIT,
+            include_io=False,
+            stream_frame=DEFAULT_STREAM_FRAME_SECONDS,
+            stream_hop=DEFAULT_STREAM_HOP_SECONDS,
+        ))
     elif command in {"data", "model", "target", "k", "start", "duration", "max-rate"}:
         update_interactive_setting(command, args, state)
     else:

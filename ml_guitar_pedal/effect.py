@@ -9,7 +9,7 @@ import numpy as np
 
 from ml_guitar_pedal.alsa_pcm import AlsaPcm, available_devices
 from ml_guitar_pedal.control import ModeServer
-from ml_guitar_pedal.processing import Overdrive, SwitchableEffect
+from ml_guitar_pedal.processing import Fuzz, Overdrive, SwitchableEffect
 
 
 class AudioMeter:
@@ -38,16 +38,19 @@ class AudioMeter:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Live guitar overdrive through ALSA audio devices.")
+    parser = argparse.ArgumentParser(description="Live guitar overdrive and fuzz through ALSA audio devices.")
     parser.add_argument("--input", help="ALSA capture device, e.g. plughw:1,0")
     parser.add_argument("--output", help="ALSA playback device, e.g. plughw:1,0")
     parser.add_argument("--list-devices", action="store_true", help="Show ALSA capture and playback devices")
     parser.add_argument("--rate", type=int, default=48_000)
     parser.add_argument("--block", type=int, default=128)
     parser.add_argument("--drive", type=float, default=20.0, help="Overdrive gain (at least 1)")
-    parser.add_argument("--tone", type=float, default=3_000.0, help="Low pass cutoff in Hz")
-    parser.add_argument("--mix", type=float, default=1.0, help="Wet mix from 0 to 1")
-    parser.add_argument("--level", type=float, default=0.5, help="Output level from 0 to 1")
+    parser.add_argument("--tone", type=float, default=3_000.0, help="Overdrive low pass cutoff in Hz")
+    parser.add_argument("--mix", type=float, default=1.0, help="Overdrive wet mix from 0 to 1")
+    parser.add_argument("--level", type=float, default=0.5, help="Overdrive output level from 0 to 1")
+    parser.add_argument("--fuzz-drive", type=float, default=15.0, help="Fuzz input gain (at least 1)")
+    parser.add_argument("--fuzz-tone", type=float, default=2_500.0, help="Fuzz low pass cutoff in Hz")
+    parser.add_argument("--fuzz-level", type=float, default=0.45, help="Fuzz output level from 0 to 1")
     parser.add_argument("--clean-level", type=float, default=1.0, help="Clean output level from 0 to 1")
     parser.add_argument("--meter", action="store_true", help="Log input level and ALSA recoveries every 2 seconds")
     return parser
@@ -66,8 +69,10 @@ def main(argv: list[str] | None = None) -> None:
         or not 0 < args.tone < args.rate / 2
         or not 0 <= args.mix <= 1 or not 0 <= args.level <= 1
         or not 0 <= args.clean_level <= 1
+        or args.fuzz_drive < 1 or not 0 < args.fuzz_tone < args.rate / 2
+        or not 0 <= args.fuzz_level <= 1
     ):
-        parser.error("invalid rate, block, drive, tone, mix, level, or clean level")
+        parser.error("invalid rate, block, overdrive, fuzz, or clean level setting")
     if not (args.input or inputs):
         parser.error("no ALSA capture device found; connect a USB audio interface and check --list-devices")
     if not (args.output or outputs):
@@ -79,6 +84,7 @@ def main(argv: list[str] | None = None) -> None:
         Overdrive(args.rate, args.drive, args.tone, args.mix, args.level),
         args.rate,
         args.clean_level,
+        Fuzz(args.rate, args.fuzz_drive, args.fuzz_tone, args.fuzz_level),
     )
     meter = AudioMeter(args.rate) if args.meter else None
 

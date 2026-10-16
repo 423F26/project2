@@ -1,4 +1,4 @@
-"""Local commands for the running pedal's clean/effect mode."""
+"""Local commands for the running pedal's mode and effect selection."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from ml_guitar_pedal.processing import SwitchableEffect
 
 
 CONTROL_SOCKET = Path("/run/guitar-effect.sock")
-MODES = ("status", "clean", "effect", "toggle")
+MODES = ("status", "clean", "effect", "toggle", "fuzz", "overdrive")
 
 
 class ModeServer:
@@ -36,7 +36,7 @@ class ModeServer:
         with connection:
             connection.settimeout(0.01)
             try:
-                command = connection.recv(64).decode().strip()
+                command = connection.recv(128).decode().strip()
                 if command == "state":
                     response = self._state()
                 elif command.startswith("amount "):
@@ -46,6 +46,30 @@ class ModeServer:
                     self.effect.set_amount(float(parts[1]))
                     response = self._state()
                     print(f"amount: {self.effect.amount:.2f}", flush=True)
+                elif command.startswith("board "):
+                    members = command[6:]
+                    pedals = () if members == "-" else tuple(members.split(","))
+                    self.effect.set_board(pedals)
+                    response = self._state()
+                    print(f"board: {' -> '.join(self.effect.graph.nodes)}", flush=True)
+                elif command.startswith("slots "):
+                    members = command[6:].split(",")
+                    if len(members) != 2:
+                        raise ValueError("usage: slots <left>,<right>")
+                    self.effect.set_slots(tuple(None if member == "-" else member for member in members))
+                    response = self._state()
+                    print(f"slots: {self.effect.graph.slots}", flush=True)
+                elif command.startswith("config "):
+                    parts = command.split()
+                    if len(parts) != 4:
+                        raise ValueError("usage: config <pedal> <setting> <value>")
+                    self.effect.set_pedal_config(parts[1], parts[2], float(parts[3]))
+                    response = self._state()
+                    print(f"config: {parts[1]} {parts[2]} {parts[3]}", flush=True)
+                elif command in ("fuzz", "overdrive"):
+                    self.effect.set_effect_type(command)
+                    response = self._state()
+                    print(f"effect type: {command}", flush=True)
                 else:
                     response = self.effect.set_mode(command)
                     if command != "status":
@@ -58,7 +82,17 @@ class ModeServer:
                     pass
 
     def _state(self) -> str:
-        return json.dumps({"enabled": self.effect.enabled, "amount": self.effect.amount, "mode": self.effect.mode})
+        graph = self.effect.graph
+        return json.dumps({
+            "enabled": self.effect.enabled,
+            "amount": self.effect.amount,
+            "mode": self.effect.mode,
+            "effect_type": self.effect.effect_type,
+            "pedals": graph.pedals,
+            "slots": graph.slots,
+            "settings": self.effect.settings,
+            "graph": {"nodes": graph.nodes, "edges": graph.edges},
+        })
 
     def close(self) -> None:
         self.socket.close()
@@ -76,15 +110,28 @@ def send_mode_command(command: str, path: Path = CONTROL_SOCKET) -> str:
         client.settimeout(2)
         client.connect(str(path))
         client.sendall(command.encode())
-        return client.recv(128).decode().strip()
+        return client.recv(2048).decode().strip()
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="Switch the running guitar effect without stopping audio.")
-    parser.add_argument("mode", nargs="?", default="status", choices=MODES)
+    parser = argparse.ArgumentParser(description="Switch clean/effect mode or edit the pedal board without stopping audio.")
+    parser.add_argument("mode", nargs="?", default="status", choices=(*MODES, "board", "slots", "config"))
+    parser.add_argument("arguments", nargs="*", help="Board order, slot contents, or pedal setting")
     args = parser.parse_args(argv)
+    if args.mode in ("board", "slots"):
+        if len(args.arguments) != 1:
+            parser.error(f"{args.mode} requires one comma-separated list")
+        command = f"{args.mode} {args.arguments[0]}"
+    elif args.mode == "config":
+        if len(args.arguments) != 3:
+            parser.error("config requires pedal, setting, and value")
+        command = f"config {' '.join(args.arguments)}"
+    else:
+        if args.arguments:
+            parser.error(f"{args.mode} takes no additional arguments")
+        command = args.mode
     try:
-        response = send_mode_command(args.mode)
+        response = send_mode_command(command)
     except OSError as error:
         parser.exit(1, f"pedal effect is not running: {error}\n")
     if response.startswith("error:"):

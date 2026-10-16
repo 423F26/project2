@@ -4,7 +4,7 @@ Start with [installation and setup](getting-started.md), then choose the workflo
 
 | Task | Guide |
 | --- | --- |
-| Play guitar through the overdrive, switch modes, or use the footswitch/browser control | [Live effect](live-effect.md) |
+| Build an overdrive/fuzz signal path, switch modes, or use footswitch/browser/LVGL control | [Live effect](live-effect.md) |
 | Prepare recordings, train a pitch classifier, predict WAV files, or benchmark it | [Pitch classifier](pitch-classifier.md) |
 | Trigger a fixed MIDI note from input volume | [Audio-to-MIDI](audio-to-midi.md) |
 

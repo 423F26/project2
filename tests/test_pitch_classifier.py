@@ -7,9 +7,10 @@ import tempfile
 import unittest
 import wave
 from pathlib import Path
+from unittest.mock import patch
 
 from ml_guitar_pedal.audio import read_wav_mono
-from ml_guitar_pedal.cli import InteractiveState, build_parser, handle_interactive_command
+from ml_guitar_pedal.cli import InteractiveState, build_parser, handle_interactive_command, main
 from ml_guitar_pedal.dataset import midi_to_note
 from ml_guitar_pedal.features import correct_octave_from_even_harmonics, extract_features
 from ml_guitar_pedal.model import KnnPitchClassifier, TrainingExample
@@ -102,6 +103,14 @@ class PitchClassifierTests(unittest.TestCase):
     def test_interactive_parser_uses_project_defaults(self) -> None:
         args = build_parser().parse_args(["interactive"])
 
+        self.assertEqual(args.data, Path("data/clean"))
+        self.assertEqual(args.model, Path("models/clean_pitch_knn.json"))
+
+    def test_no_command_starts_interactive_with_project_defaults(self) -> None:
+        with patch("sys.argv", ["pedal"]), patch("ml_guitar_pedal.cli.interactive_command") as interactive:
+            main()
+
+        args = interactive.call_args.args[0]
         self.assertEqual(args.data, Path("data/clean"))
         self.assertEqual(args.model, Path("models/clean_pitch_knn.json"))
 

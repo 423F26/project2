@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import wave
 from dataclasses import dataclass
 from pathlib import Path
@@ -59,27 +58,6 @@ def read_wav_mono(
         raise ValueError(f"{path} did not yield any readable samples")
 
     return AudioSignal(sample_rate=output_rate, samples=tuple(_remove_dc(samples)))
-
-
-def rms(samples: tuple[float, ...]) -> float:
-    return math.sqrt(sum(sample * sample for sample in samples) / len(samples))
-
-
-def zero_crossing_rate(samples: tuple[float, ...]) -> float:
-    crossings = 0
-    previous = samples[0]
-    for sample in samples[1:]:
-        if (previous < 0 <= sample) or (previous >= 0 > sample):
-            crossings += 1
-        previous = sample
-    return crossings / max(1, len(samples) - 1)
-
-
-def crest_factor(samples: tuple[float, ...]) -> float:
-    level = rms(samples)
-    if level == 0:
-        return 0.0
-    return max(abs(sample) for sample in samples) / level
 
 
 def _decode_pcm_sample(raw: bytes, offset: int, sample_width: int) -> float:

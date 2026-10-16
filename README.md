@@ -1,6 +1,6 @@
 # ML Guitar Pedal
 
-Python tools for two separate workflows: a live Raspberry Pi guitar overdrive
+Python tools for two separate workflows: live Raspberry Pi guitar effects
 effect, and an offline K-nearest-neighbors (KNN) pitch classifier for labeled
 clean-tone recordings under `data/clean/`. The live effect does not load or use
 the trained classifier. An experimental audio-to-MIDI command triggers a fixed
@@ -9,6 +9,7 @@ note from volume; it does not transcribe pitch.
 ## Documentation
 
 - [User guides](docs/user/README.md): setup, live effect, pitch classifier, and audio-to-MIDI.
+- [LVGL touchscreen preview](lvgl_ui/README.md): native desktop demo of the pedal controls.
 - [Developer guides](docs/dev/README.md): architecture, development checks, live control, and classifier internals.
 - [Agile plan](docs/agile/README.md): the current project backlog, ESOF-aligned sprint plan, and burndown.
 
@@ -53,14 +54,15 @@ ssh -L 8765:127.0.0.1:8765 pi-host 'cd /path/to/project2 && uv run pedal demo-ui
 ```
 
 Keep that SSH terminal open and visit `http://127.0.0.1:8765` in a browser.
-The page has a clean/effect button and a live effect-amount slider. The demo
+The page can add or remove fuzz and overdrive from the signal path, reverse their
+slot positions, edit each pedal through its cog, bypass the board, and adjust the global effect mix. The demo
 uses the running pedal if one is already active, or starts it if needed. When
 the SSH command ends, it stops only an effect process that it started itself.
 The UI binds to `127.0.0.1` on the Pi. Its default port is 8765; if you set
 `--port`, update the SSH tunnel as well. If you need nondefault ALSA devices,
 start `pedal effect` with those devices before opening the UI.
 
-The `effect` command processes the guitar input with overdrive and a tone filter,
+The `effect` command processes the guitar input with overdrive or hard-clipped fuzz,
 then plays it through the interface output. It chooses the first capture device
 and its matching playback device when available. To select devices explicitly:
 
@@ -73,7 +75,13 @@ While the effect is running, use another terminal on the Pi to switch instantly:
 ```bash
 uv run pedal mode toggle  # switch clean/effect
 uv run pedal mode clean   # clean guitar
-uv run pedal mode effect  # overdrive
+uv run pedal mode effect  # enable the board
+uv run pedal mode board fuzz,overdrive  # run both in this order
+uv run pedal mode board -  # remove both pedals
+uv run pedal mode slots -,fuzz  # leave fuzz in the right slot
+uv run pedal mode config fuzz drive 25  # set fuzz drive
+uv run pedal mode fuzz    # shortcut: board with only fuzz
+uv run pedal mode overdrive  # shortcut: board with only overdrive
 uv run pedal mode         # show current mode
 ```
 
@@ -93,7 +101,7 @@ switch. Run the listener in a second terminal while `pedal effect` runs:
 uv run pedal footswitch
 ```
 
-Each press switches between clean and overdrive. The listener uses `gpiomon`
+Each press switches between clean and the selected effect. The listener uses `gpiomon`
 from `libgpiod` with a pull-up, falling edges, and a 50 ms debounce on
 `gpiochip0` line 17. GPIO numbering and libgpiod CLI support can vary
 across Raspberry Pi models and operating system versions.

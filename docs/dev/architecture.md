@@ -6,8 +6,8 @@ effect process and communicates with it through a local socket.
 
 | Path | Modules | Flow |
 | --- | --- | --- |
-| Live effect | `alsa_pcm.py`, `effect.py`, `processing.py` | ALSA mono PCM capture → overdrive/clean crossfade → ALSA playback |
-| Live control | `control.py`, `footswitch.py`, `demo_ui.py` | Local Unix socket commands → effect state; GPIO and localhost HTTP UI are optional clients |
+| Live effect | `alsa_pcm.py`, `effect.py`, `processing.py` | ALSA mono PCM capture → ordered pedal graph → ALSA playback |
+| Live control | `control.py`, `footswitch.py`, `demo_ui.py`, `lvgl_ui/main.c` | Local Unix socket commands → graph state; GPIO, browser, and LVGL clients |
 | Offline classifier | `dataset.py`, `audio.py`, `features.py`, `model.py`, `streaming.py`, `cli.py` | Labeled WAV → mono segment → features → KNN training, prediction, or benchmark |
 | MIDI trigger | `audio_to_midi.py` | `arecord` RMS threshold → fixed MIDI note on/off |
 
@@ -15,15 +15,18 @@ effect process and communicates with it through a local socket.
 
 `effect.py` selects ALSA devices, validates effect settings, opens capture and
 playback with `AlsaPcm`, and processes each block through `SwitchableEffect`.
-`processing.py` applies tanh overdrive and a one-pole low-pass tone filter.
-Clean/effect changes crossfade over 10 ms. `control.py` serves commands on
-`/run/guitar-effect.sock`; `mode` sends `status`, `clean`, `effect`, or
-`toggle`. The browser UI also uses internal `state` and `amount <0..1>` socket
-commands. The socket is local to one machine and is removed on normal shutdown.
+`processing.py` applies tanh overdrive or hard-clipped fuzz and a one-pole tone filter.
+`PedalGraph` stores two fixed board slots and derives the serial input-to-output node order and directed edges from occupied slots.
+`SwitchableEffect` runs connected pedals in that order and crossfades audible board, setting, or
+bypass changes over 10 ms. `control.py` serves `board <pedals>`, `slots <left>,<right>`, `config <pedal> <setting> <value>`, `state`,
+`amount <0..1>`, and mode commands on `/run/guitar-effect.sock`. The socket is
+local to one machine and is removed on normal shutdown.
 
 The browser server binds only to `127.0.0.1`. Its endpoints are
-`GET /api/state`, `POST /api/mode` with `{"enabled": true|false}`, and
-`POST /api/amount` with `{"amount": 0..1}`. `demo_ui.py` starts a default
+`GET /api/state`, `POST /api/mode` with `{"enabled": true|false}`,
+`POST /api/board` with `{"pedals": ["fuzz", "overdrive"]}`,
+`POST /api/slots` with `{"slots": [null, "fuzz"]}`,
+`POST /api/config` with a pedal, setting, and value, and `POST /api/amount` with `{"amount": 0..1}`. `demo_ui.py` starts a default
 effect process only if no existing control socket responds. The server has no
 authentication; access it locally or through an SSH tunnel.
 
