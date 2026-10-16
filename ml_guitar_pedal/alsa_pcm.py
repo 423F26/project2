@@ -59,7 +59,7 @@ class AlsaPcm:
         self._read_buffer = ctypes.create_string_buffer(block * 2)
         self._check(self.library.snd_pcm_open(ctypes.byref(self.handle), device.encode(), stream, 0))
         try:
-            # plughw converts the iRig's capture format and playback channels.
+            # ALSA plugins convert capture formats and playback channels as needed.
             latency_us = max(10_000, int(block * 4_000_000 / rate))
             self._check(self.library.snd_pcm_set_params(
                 self.handle, self.library.snd_pcm_format_value(b"S16_LE"),

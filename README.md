@@ -58,9 +58,13 @@ The page can add or remove fuzz and overdrive from the signal path, reverse thei
 slot positions, edit each pedal through its cog, bypass the board, and adjust the global effect mix. The demo
 uses the running pedal if one is already active, or starts it if needed. When
 the SSH command ends, it stops only an effect process that it started itself.
-The UI binds to `127.0.0.1` on the Pi. Its default port is 8765; if you set
-`--port`, update the SSH tunnel as well. If you need nondefault ALSA devices,
-start `pedal effect` with those devices before opening the UI.
+The UI binds to `127.0.0.1` on the Pi. When it starts the effect, it uses the
+first capture device for the guitar and ALSA's system default for playback.
+Set the Pi's system default to its built-in audio output to hear the demo there
+instead of through the iRig, or use `demo-ui --output <ALSA-device>` to select
+an output. An already-running effect keeps its current output; stop it first
+or start `pedal effect` with explicit devices before opening the UI. The default
+UI port is 8765; if you set `--port`, update the SSH tunnel as well.
 
 The `effect` command processes the guitar input with overdrive or hard-clipped fuzz,
 then plays it through the interface output. It chooses the first capture device

@@ -249,12 +249,14 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
-def _ensure_effect() -> subprocess.Popen | None:
+def _ensure_effect(output_device: str) -> subprocess.Popen | None:
     try:
         send_mode_command("state")
         return None
     except OSError:
-        process = subprocess.Popen([sys.executable, "-m", "ml_guitar_pedal.cli", "effect"])
+        process = subprocess.Popen([
+            sys.executable, "-m", "ml_guitar_pedal.cli", "effect", "--output", output_device,
+        ])
         for _ in range(50):
             if process.poll() is not None:
                 raise RuntimeError("The guitar effect could not start; check the iRig connection")
@@ -271,10 +273,11 @@ def _ensure_effect() -> subprocess.Popen | None:
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Serve a local browser UI for the live guitar effect.")
     parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument("--output", default="default", help="ALSA playback device (default: system audio)")
     args = parser.parse_args(argv)
     if not 1 <= args.port <= 65535:
         parser.error("port must be between 1 and 65535")
-    process = _ensure_effect()
+    process = _ensure_effect(args.output)
     try:
         with ThreadingHTTPServer(("127.0.0.1", args.port), Handler) as server:
             print(f"Guitar pedal UI: http://127.0.0.1:{args.port} (use an SSH tunnel from your computer)", flush=True)

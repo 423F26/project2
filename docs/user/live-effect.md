@@ -65,7 +65,7 @@ On your computer, replace the host and path with the target Pi values:
 ssh -L 8765:127.0.0.1:8765 pi-host 'cd /path/to/project2 && uv run pedal demo-ui'
 ```
 
-Keep the SSH terminal open and visit `http://127.0.0.1:8765`. The page adds or removes fuzz and overdrive, reverses their slot positions, opens each pedal’s cog settings, bypasses the board, and adjusts the global mix. It binds only to `127.0.0.1` on the Pi. The UI uses an existing effect process if one responds, or starts the effect with default device settings and stops only that process on exit. For a specific interface, start `pedal effect` with `--input` and `--output` first. `demo-ui --port <port>` changes the server port; update the SSH forward to match.
+Keep the SSH terminal open and visit `http://127.0.0.1:8765`. The page adds or removes fuzz and overdrive, reverses their slot positions, opens each pedal’s cog settings, bypasses the board, and adjusts the global mix. It binds only to `127.0.0.1` on the Pi. When the UI starts the effect, it captures from the first available input and plays through ALSA's system default output. Set the Pi's system default to its built-in audio output to hear the demo there instead of through the iRig, or use `demo-ui --output <ALSA-device>` to select a specific output. An already-running effect keeps its current output; stop it first or launch `pedal effect` with explicit `--input` and `--output` options. The UI stops only an effect process it started. `demo-ui --port <port>` changes the server port; update the SSH forward to match.
 
 ## LVGL pedal board preview
 
