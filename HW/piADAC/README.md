@@ -2,7 +2,7 @@
 
 ZynADAC is an Input/Output Audio Interface for the RBPi.
 
-![Image of ZynADAC Audio Interface](https://github.com/zynthian/zynthian-hw/blob/master/ZynADAC/ZynADAC_render_01.png)
+![Image of ZynADAC Audio Interface](ZynADAC_render_01.png)
 
 It features:
 

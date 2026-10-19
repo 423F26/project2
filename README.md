@@ -8,10 +8,12 @@ note from volume; it does not transcribe pitch.
 
 ## Documentation
 
+- [Documentation website](https://423f26.github.io/project2/): browse all guides and download planning and hardware documents.
 - [User guides](docs/user/README.md): setup, live effect, pitch classifier, and audio-to-MIDI.
 - [LVGL touchscreen preview](lvgl_ui/README.md): native desktop demo of the pedal controls.
 - [Developer guides](docs/dev/README.md): architecture, development checks, live control, and classifier internals.
 - [Agile plan](docs/agile/README.md): the current project backlog, ESOF-aligned sprint plan, and burndown.
+- [Hardware files](docs/hardware.md): ZynADAC overview, schematic, render, and component import guides.
 
 ## Requirements and setup
 

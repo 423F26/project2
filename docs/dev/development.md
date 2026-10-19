@@ -14,6 +14,17 @@ The package and `pedal` entry point are declared in `pyproject.toml`; dependency
 
 GitHub Actions runs this test suite on every push with Python 3.11 and the locked dependencies in `uv.lock`.
 
+## Documentation website
+
+The [documentation site](https://423f26.github.io/project2/) publishes the repository README, user and developer guides, touchscreen and hardware guides, agile workbooks, and hardware reference files. To build it locally from the repository root:
+
+```bash
+python -m pip install -r requirements-docs.txt
+python scripts/build_docs.py
+```
+
+The site is written to `build/site/`. The build uses MkDocs strict mode to catch broken documentation links. Pushes to `main` that change documentation or site configuration publish it through GitHub Actions.
+
 These tests do not validate an ALSA device, physical GPIO switch, MIDI port, or SSH/browser connection. Test those paths on the target hardware after changing their modules.
 
 ## Where to change behavior
