@@ -1,0 +1,27 @@
+site_name: ML Guitar Pedal
+site_url: https://423f26.github.io/project2/
+repo_url: https://github.com/423F26/project2
+docs_dir: ../build/docs-source
+site_dir: ../build/site
+theme:
+  name: mkdocs
+nav:
+  - Home: index.md
+  - User guides:
+      - Overview: docs/user/README.md
+      - Getting started: docs/user/getting-started.md
+      - Live effect: docs/user/live-effect.md
+      - LV2 plugins: docs/user/lv2-plugins.md
+      - Tuner and MIDI: docs/user/tuner-midi.md
+  - Developer guides:
+      - Overview: docs/dev/README.md
+      - Architecture: docs/dev/architecture.md
+      - Build and tests: docs/dev/development.md
+      - Live audio and control: docs/dev/live-audio.md
+      - Internal MIDI API: docs/dev/midi-api.md
+      - ML roadmap: docs/dev/ml-roadmap.md
+  - Touchscreen UI: lvgl_ui/README.md
+  - Hardware:
+      - Hardware files: docs/hardware.md
+      - ZynADAC: HW/piADAC/README.md
+  - Agile progress: docs/agile/README.md

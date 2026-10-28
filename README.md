@@ -4,6 +4,12 @@ A C guitar pedal engine with a dynamic serial board, five built-in effects, LV2 
 
 This C runtime is the foundation for the ML guitar pedal. It does not load an ML model yet. The plan is to keep audio processing predictable, then add learned playing-gesture and tone controls alongside it. See the [ML roadmap](docs/dev/ml-roadmap.md).
 
+## Project status
+
+The C engine, five built-in effects, serial board controls, browser panel, LV2 import path, tuner, and internal MIDI event queue are implemented. The automated tests cover DSP, tuner, LV2 processing with a local test plugin, and the local command and HTTP protocols. Raspberry Pi audio, GPIO footswitch wiring, touchscreen deployment, latency, and the current ADAC board still need device-level validation. Presets and ML inference are planned work. See the [agile progress tracker](docs/agile/README.md) for acceptance status and upcoming work.
+
+The runtime is in `src/` and `include/`, its tests in `tests/`, and the current KiCad project in `HW/piADAC/`. `HW/production/` holds an earlier fabrication export; use the current files under `HW/piADAC/production/` for the latest board revision.
+
 ## Build
 
 On Debian or Raspberry Pi OS, install `cmake`, `pkg-config`, `libasound2-dev`, `liblilv-dev`, `libjson-c-dev`, `jq`, and `curl`. Then:
@@ -13,6 +19,18 @@ cmake -S . -B build/release -DCMAKE_BUILD_TYPE=Release
 cmake --build build/release -j 4
 ctest --test-dir build/release --output-on-failure
 ```
+
+## Documentation
+
+The documentation site is built with MkDocs. To preview the same site locally, install the dependencies and stage the repository files before starting the preview server:
+
+```sh
+python -m pip install -r docs/requirements.txt
+python docs/build_site.py
+python -m mkdocs serve -f docs/mkdocs.yml
+```
+
+Open the localhost URL printed by MkDocs. On every push, GitHub Actions builds the C project and runs CTest. On a push to `main`, it also builds the documentation and publishes it to [GitHub Pages](https://423f26.github.io/project2/) after the tests pass.
 
 ## Run
 

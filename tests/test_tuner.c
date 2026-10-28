@@ -62,12 +62,21 @@ int main(void)
     CHECK(tuner.note == -1 && queue.count == 0);
 
     CHECK(!midi_queue_push(&queue, (MidiEvent){0, 0x70, 1, 1}));
+    CHECK(!midi_queue_push(&queue, (MidiEvent){0, 0x90, 128, 1}));
+    CHECK(!midi_queue_push(&queue, (MidiEvent){0, 0xc0, 1, 1}));
+    CHECK(queue.count == 0);
     for(int i = 0; i < MIDI_QUEUE_CAPACITY + 3; ++i)
         CHECK(midi_queue_push(&queue, (MidiEvent){(uint64_t)i, 0x90, 60, 100}));
     CHECK(queue.count == MIDI_QUEUE_CAPACITY && queue.dropped == 3);
     MidiEvent all[MIDI_QUEUE_CAPACITY];
     CHECK(midi_queue_drain(&queue, all, MIDI_QUEUE_CAPACITY) == MIDI_QUEUE_CAPACITY);
     CHECK(all[0].frame == 3 && all[MIDI_QUEUE_CAPACITY - 1].frame == MIDI_QUEUE_CAPACITY + 2);
+    CHECK(queue.count == 0 && midi_queue_drain(&queue, all, 1) == 0);
+    for(int i = 0; i < 3; ++i)
+        CHECK(midi_queue_push(&queue, (MidiEvent){(uint64_t)i, 0x90, 60, 100}));
+    CHECK(midi_queue_drain(&queue, all, 2) == 2);
+    CHECK(all[0].frame == 0 && all[1].frame == 1 && queue.count == 1);
+    CHECK(midi_queue_drain(&queue, all, 2) == 1 && all[0].frame == 2);
 
     for(int rate_index = 0; rate_index < 2; ++rate_index) {
         int rate = rate_index == 0 ? 44100 : 96000;

@@ -6,4 +6,4 @@ Tracking is on by default. Use the browser's **Tuner** switch, `pedalctl tuner o
 
 The tuner generates MIDI note on/off events internally after the pitch stabilizes. Read and consume them with `pedalctl midi-events` or `GET /api/midi` on the localhost browser server. Each event has a frame timestamp and `status`, `data1`, and `data2` MIDI bytes. A note-on uses status `144` (channel 1), the detected MIDI note number, and a velocity derived from signal level; note-off uses status `128` and velocity zero. Reading events drains the queue, so use one consumer. The queue holds 256 events and reports any dropped events.
 
-This is an internal event API; it does not yet send MIDI to an ALSA sequencer port or a physical MIDI device. The previous Python volume-triggered fixed-note experiment is not part of this C branch.
+This is an internal event API; it does not yet send MIDI to an ALSA sequencer port or a physical MIDI device.
