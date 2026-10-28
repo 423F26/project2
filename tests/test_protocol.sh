@@ -23,6 +23,10 @@ for i in {1..100}; do [[ -S $PEDAL_CONTROL_SOCKET ]] && break; sleep .02; done
 "$control" board - | jq -e '.pedals == []'
 if "$control" slots fuzz,- >"$tmp/invalid" 2>&1; then exit 1; fi
 "$control" lv2-list | jq -e 'has("plugins")'
+"$control" state | jq -e '.tuner.enabled == true and .tuner.note == null and .midi.queued == 0'
+"$control" tuner off | jq -e '.tuner.enabled == false'
+"$control" tuner on | jq -e '.tuner.enabled == true'
+"$control" midi-events | jq -e '.events == [] and .dropped == 0'
 port=$((20000 + RANDOM % 30000))
 "$web" --port "$port" --html "$(dirname "$0")/../web/index.html" >"$tmp/web.log" 2>&1 &
 web_pid=$!
@@ -32,6 +36,9 @@ curl -fsS "http://127.0.0.1:$port/" | grep -q 'Import effect'
 curl -fsS -H 'Content-Type: application/json' -d '{"pedals":["chorus","tremolo"]}' "http://127.0.0.1:$port/api/board" | jq -e '.pedals == ["chorus","tremolo"]'
 curl -fsS -H 'Content-Type: application/json' -d '{"enabled":false}' "http://127.0.0.1:$port/api/mode" | jq -e '.enabled == false'
 curl -fsS "http://127.0.0.1:$port/api/lv2" | jq -e 'has("plugins")'
+curl -fsS "http://127.0.0.1:$port/api/midi" | jq -e '.events == []'
+curl -fsS -H 'Content-Type: application/json' -d '{"enabled":false}' "http://127.0.0.1:$port/api/tuner" | jq -e '.tuner.enabled == false'
+curl -fsS -H 'Content-Type: application/json' -d '{"enabled":true}' "http://127.0.0.1:$port/api/tuner" | jq -e '.tuner.enabled == true'
 
 # Exercise the browser's LV2 import path when this machine has a compatible plugin.
 plugin_uri=$(curl -fsS "http://127.0.0.1:$port/api/lv2" | jq -r '.plugins[0].uri // empty')

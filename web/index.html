@@ -58,6 +58,19 @@
   .row { display: flex; justify-content: space-between; align-items: center; margin: 32px 0 12px; font-weight: 600; }
   input[type=range] { width: 100%; accent-color: #20c68a; cursor: pointer; }
   .hint { margin-top: 25px; font-size: .9rem; min-height: 1.3em; }
+  .tuner { margin: 22px 0 4px; padding: 19px 20px; border: 1px solid #46616a; border-radius: 16px; background: radial-gradient(circle at 50% 0, #28433c, #17252d 72%); box-shadow: inset 0 1px 0 #ffffff24; }
+  .tuner-head { display: flex; align-items: center; justify-content: space-between; }
+  .tuner-head h2 { margin: 0; font-size: 1.1rem; letter-spacing: .07em; text-transform: uppercase; }
+  button.tuner-toggle { width: auto; min-height: 34px; padding: 0 14px; border: 1px solid #6ea995; border-radius: 8px; background: #214a40; color: #e5fff3; font-size: .82rem; }
+  button.tuner-toggle.off { border-color: #637782; background: #34444b; color: #d1dadd; }
+  .tuner-readout { display: flex; align-items: baseline; gap: 18px; min-height: 66px; }
+  .tuner-readout strong { min-width: 92px; font-size: 3.3rem; line-height: 1.25; }
+  .tuner-readout span { color: #b6c7c8; font-variant-numeric: tabular-nums; }
+  .tuner-scale { display: flex; align-items: center; gap: 12px; color: #b6c7c8; }
+  .tuner-track { flex: 1; height: 10px; position: relative; border-radius: 9px; background: linear-gradient(90deg, #cc8095, #d5bd70 38%, #4dc99e 48%, #4dc99e 52%, #d5bd70 62%, #cc8095); }
+  .tuner-track::after { content: ''; position: absolute; left: 50%; top: -5px; height: 20px; border-left: 2px solid #eafff5; }
+  .tuner-needle { position: absolute; left: 50%; top: -7px; width: 5px; height: 24px; transform: translateX(-50%); border-radius: 3px; background: #fff; box-shadow: 0 0 9px #fff9; transition: left .16s; }
+  .tuner-cents { display: block; margin-top: 11px; color: #c4d4d0; font-size: .84rem; text-align: center; font-variant-numeric: tabular-nums; }
 </style>
 </head>
 <body>
@@ -65,6 +78,12 @@
   <h1>Guitar Pedal Board</h1>
   <p>Build the signal path from input to output</p>
   <button id="toggle" type="button" aria-pressed="true">Signal ON</button>
+  <section class="tuner" aria-labelledby="tuner-title">
+    <div class="tuner-head"><h2 id="tuner-title">Tuner</h2><button id="tuner-toggle" class="tuner-toggle" type="button" aria-pressed="true">On</button></div>
+    <div class="tuner-readout"><strong id="tuner-note" aria-live="polite">—</strong><span id="tuner-frequency">Waiting for input</span></div>
+    <div class="tuner-scale" aria-hidden="true"><span>♭</span><div class="tuner-track"><div id="tuner-needle" class="tuner-needle"></div></div><span>♯</span></div>
+    <output id="tuner-cents" class="tuner-cents">Play a single note to tune</output>
+  </section>
   <p id="path" class="path">INPUT → OVERDRIVE → OUTPUT</p>
   <h2>Active board</h2>
   <div id="board" class="board"></div>
@@ -87,6 +106,11 @@
 </dialog>
 <script>
 const toggle = document.getElementById('toggle');
+const tunerToggle = document.getElementById('tuner-toggle');
+const tunerNote = document.getElementById('tuner-note');
+const tunerFrequency = document.getElementById('tuner-frequency');
+const tunerCents = document.getElementById('tuner-cents');
+const tunerNeedle = document.getElementById('tuner-needle');
 const board = document.getElementById('board');
 const library = document.getElementById('pedal-library');
 const search = document.getElementById('search');
@@ -103,6 +127,7 @@ const amount = document.getElementById('amount');
 const value = document.getElementById('value');
 const status = document.getElementById('status');
 let enabled = true;
+let tunerEnabled = true;
 let pedals = ['overdrive'];
 let libraryExpanded = false;
 let settings = {};
@@ -123,6 +148,7 @@ function render(state) {
   pedals = state.pedals || [];
   settings = state.settings || {};
   available = state.available || {};
+  renderTuner(state.tuner);
   renderBoard();
   renderLibrary();
   toggle.textContent = enabled ? 'Signal ON' : 'Bypassed';
@@ -131,6 +157,20 @@ function render(state) {
   path.textContent = ['INPUT', ...pedals.map(pedal => available[pedal]?.name || pedal), 'OUTPUT'].join(' → ');
   if (!dragging) { amount.value = Math.round(state.amount * 100); value.textContent = amount.value + '%'; }
   status.textContent = enabled ? `${pedals.length} pedal${pedals.length === 1 ? '' : 's'} in signal path` : 'Signal is bypassed';
+}
+function renderTuner(tuner) {
+  tunerEnabled = !!tuner?.enabled;
+  tunerToggle.textContent = tunerEnabled ? 'On' : 'Off';
+  tunerToggle.classList.toggle('off', !tunerEnabled);
+  tunerToggle.setAttribute('aria-pressed', String(tunerEnabled));
+  const note = tunerEnabled && tuner?.note ? tuner.note : '—';
+  if (tunerNote.textContent !== note) tunerNote.textContent = note;
+  tunerFrequency.textContent = tunerEnabled && tuner?.frequency ? `${tuner.frequency.toFixed(1)} Hz` : (tunerEnabled ? 'Waiting for input' : 'Tuner off');
+  const cents = tunerEnabled && tuner?.note ? tuner.cents : 0;
+  tunerNeedle.style.left = `${Math.max(0, Math.min(100, 50 + cents))}%`;
+  tunerCents.textContent = tunerEnabled && tuner?.note ?
+    (Math.abs(cents) <= 5 ? 'In tune' : `${Math.abs(cents).toFixed(1)} cents ${cents < 0 ? 'flat' : 'sharp'}`) :
+    (tunerEnabled ? 'Play a single note to tune' : 'Pitch tracking paused');
 }
 function action(label, description, callback, disabled = false) {
   const button = document.createElement('button');
@@ -255,6 +295,10 @@ async function refresh() {
 }
 toggle.addEventListener('click', async () => {
   try { await request('/api/mode', {enabled: !enabled}); } catch (error) { status.textContent = error.message; }
+});
+tunerToggle.addEventListener('click', async () => {
+  try { await request('/api/tuner', {enabled: !tunerEnabled}); }
+  catch (error) { status.textContent = error.message; }
 });
 const specs = {
   overdrive: [['drive', 1, 100, 1], ['tone', 100, 8000, 1], ['mix', 0, 1, .01], ['level', 0, 1, .01]],

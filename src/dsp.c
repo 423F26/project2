@@ -67,6 +67,7 @@ bool engine_init(Engine *engine, int rate, size_t block, double clean_level)
     }
     engine->active[0] = 0;
     engine->active_count = 1;
+    tuner_init(&engine->tuner, rate, &engine->midi);
     return true;
 }
 
@@ -270,6 +271,7 @@ static void process_chain(Engine *engine, Pedal *pedals, const size_t *indices, 
 void engine_process(Engine *engine, const int16_t *input, int16_t *output, size_t count)
 {
     if(count > MAX_BLOCK) return;
+    tuner_process(&engine->tuner, input, count);
     process_chain(engine, engine->pedals, engine->active, engine->active_count,
                   input, output, count, false);
     if(engine->transition)

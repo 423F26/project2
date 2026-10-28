@@ -37,6 +37,7 @@ static void usage(FILE *stream)
         "  --fuzz-drive N --fuzz-tone HZ --fuzz-level N\n"
         "  --clean-level N --lv2 URI [--lv2 URI ...]\n"
         "  --list-devices --list-lv2 --meter\n"
+        "  --no-tuner                      Disable pitch tracking and MIDI events\n"
         "  --socket PATH --no-audio          Test/control without ALSA\n");
 }
 
@@ -126,6 +127,23 @@ static json_object *state(Engine *engine)
     json_object *root = json_object_new_object();
     json_object_object_add(root, "enabled", json_object_new_boolean(engine->enabled));
     json_object_object_add(root, "amount", json_object_new_double(engine->amount));
+    json_object *tuner = json_object_new_object();
+    json_object_object_add(tuner, "enabled", json_object_new_boolean(engine->tuner.enabled));
+    char note_name[8];
+    json_object_object_add(tuner, "note", engine->tuner.note < 0 ? NULL :
+                           json_object_new_string(tuner_note_name(engine->tuner.note, note_name, sizeof(note_name))));
+    json_object_object_add(tuner, "midi_note", engine->tuner.note < 0 ? NULL :
+                           json_object_new_int(engine->tuner.note));
+    json_object_object_add(tuner, "frequency", engine->tuner.note < 0 ? NULL :
+                           json_object_new_double(engine->tuner.frequency));
+    json_object_object_add(tuner, "cents", engine->tuner.note < 0 ? NULL :
+                           json_object_new_double(engine->tuner.cents));
+    json_object_object_add(tuner, "confidence", json_object_new_double(engine->tuner.confidence));
+    json_object_object_add(root, "tuner", tuner);
+    json_object *midi = json_object_new_object();
+    json_object_object_add(midi, "queued", json_object_new_int64((int64_t)engine->midi.count));
+    json_object_object_add(midi, "dropped", json_object_new_int64((int64_t)engine->midi.dropped));
+    json_object_object_add(root, "midi", midi);
     json_object *pedals = json_object_new_array();
     for(size_t i = 0; i < engine->active_count; ++i)
         json_object_array_add(pedals, json_object_new_string(engine->pedals[engine->active[i]].id));
@@ -182,6 +200,25 @@ static json_object *lv2_listing(Engine *engine)
     return root;
 }
 
+static json_object *midi_events(Engine *engine)
+{
+    json_object *root = json_object_new_object();
+    json_object *events = json_object_new_array();
+    MidiEvent messages[MIDI_QUEUE_CAPACITY];
+    size_t count = midi_queue_drain(&engine->midi, messages, MIDI_QUEUE_CAPACITY);
+    for(size_t i = 0; i < count; ++i) {
+        json_object *event = json_object_new_object();
+        json_object_object_add(event, "frame", json_object_new_int64((int64_t)messages[i].frame));
+        json_object_object_add(event, "status", json_object_new_int(messages[i].status));
+        json_object_object_add(event, "data1", json_object_new_int(messages[i].data1));
+        json_object_object_add(event, "data2", json_object_new_int(messages[i].data2));
+        json_object_array_add(events, event);
+    }
+    json_object_object_add(root, "events", events);
+    json_object_object_add(root, "dropped", json_object_new_int64((int64_t)engine->midi.dropped));
+    return root;
+}
+
 static bool parse_board(Engine *engine, const char *text, size_t *indices, size_t *count)
 {
     *count = 0;
@@ -209,6 +246,11 @@ static char *reply_command(Engine *engine, const char *command)
     char error[256] = "invalid command";
     json_object *result = NULL;
     if(strcmp(command, "state") == 0) result = state(engine);
+    else if(strcmp(command, "midi-events") == 0) result = midi_events(engine);
+    else if(strcmp(command, "tuner on") == 0 || strcmp(command, "tuner off") == 0) {
+        tuner_set_enabled(&engine->tuner, strcmp(command, "tuner on") == 0);
+        result = state(engine);
+    }
     else if(strcmp(command, "lv2-list") == 0) {
         if(lv2_world_init(engine)) result = lv2_listing(engine);
         else snprintf(error, sizeof(error), "could not initialize Lilv");
@@ -399,7 +441,7 @@ int main(int argc, char **argv)
     size_t uri_count = 0;
     int rate = 48000;
     size_t block = 128;
-    bool show_devices = false, show_lv2 = false, meter = false, no_audio = false;
+    bool show_devices = false, show_lv2 = false, meter = false, no_audio = false, no_tuner = false;
     double drive = 20, tone = 3000, mix = 1, level = .5;
     double fuzz_drive = 15, fuzz_tone = 2500, fuzz_level = .45, clean_level = 1;
     static const struct option options[] = {
@@ -412,6 +454,7 @@ int main(int argc, char **argv)
         {"lv2", required_argument, NULL, 9}, {"socket", required_argument, NULL, 10},
         {"list-devices", no_argument, NULL, 11}, {"list-lv2", no_argument, NULL, 12},
         {"meter", no_argument, NULL, 13}, {"no-audio", no_argument, NULL, 14},
+        {"no-tuner", no_argument, NULL, 15},
         {"help", no_argument, NULL, 'h'}, {0, 0, 0, 0}
     };
     int option;
@@ -437,6 +480,7 @@ int main(int argc, char **argv)
         case 12: show_lv2 = true; break;
         case 13: meter = true; break;
         case 14: no_audio = true; break;
+        case 15: no_tuner = true; break;
         default: goto invalid;
         }
     }
@@ -452,6 +496,7 @@ int main(int argc, char **argv)
         free(engine);
         return 1;
     }
+    if(no_tuner) tuner_set_enabled(&engine->tuner, false);
     if(show_lv2) {
         if(!lv2_world_init(engine)) { engine_free(engine); free(engine); return 1; }
         const LilvPlugins *all = lilv_world_get_all_plugins(engine->world);

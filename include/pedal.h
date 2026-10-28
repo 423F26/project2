@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include "tuner.h"
 
 #define MAX_PEDALS 37
 #define MAX_ACTIVE 32
@@ -54,6 +55,8 @@ typedef struct {
     bool transition;
     size_t fade_position, fade_samples;
     LilvWorld *world;
+    MidiQueue midi;
+    Tuner tuner;
     int16_t scratch_a[MAX_BLOCK], scratch_b[MAX_BLOCK], old[MAX_BLOCK];
     float lv2_in[MAX_BLOCK], lv2_out[MAX_BLOCK];
 } Engine;

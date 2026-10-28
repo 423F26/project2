@@ -1,6 +1,8 @@
-# C Pedal
+# ML Guitar Pedal — C runtime
 
-A C guitar pedal engine with a dynamic serial board, five built-in effects, LV2 effect loading, a browser control panel, and a GPIO footswitch adapter. The built-in effects are Overdrive, Fuzz, Delay, Tremolo, and Chorus. The board grows with the pedals you activate.
+A C guitar pedal engine with a dynamic serial board, five built-in effects, LV2 effect loading, a browser control panel, a tuner with internal MIDI note events, and a GPIO footswitch adapter. The built-in effects are Overdrive, Fuzz, Delay, Tremolo, and Chorus. The board grows with the pedals you activate.
+
+This C runtime is the foundation for the ML guitar pedal. It does not load an ML model yet. The plan is to keep audio processing predictable, then add learned playing-gesture and tone controls alongside it. See the [ML roadmap](docs/dev/ml-roadmap.md).
 
 ## Build
 
@@ -27,6 +29,8 @@ In another terminal, from the project root:
 
 Open `http://127.0.0.1:8765`. The **Pedal library** lets you add, reorder, configure, and remove effects. **Import effect** lists compatible LV2 effects already installed on the machine. The browser binds to localhost; use an SSH tunnel for remote access: `ssh -L 8765:127.0.0.1:8765 pi-host`.
 
+The tuner analyzes the clean guitar input before the effect chain. It shows the nearest note, frequency, and cents offset in the browser. The engine also queues MIDI note on/off messages when a pitch becomes stable or the signal falls silent. Turn tracking off in the UI, with `pedalctl tuner off`, or at startup with `pedal-engine --no-tuner`.
+
 The engine socket defaults to `/run/guitar-effect.sock`. Set `PEDAL_CONTROL_SOCKET` in both processes to use another path. For a laptop control demo without audio hardware, start the engine with `--no-audio --socket /tmp/guitar-effect.sock` and set `PEDAL_CONTROL_SOCKET=/tmp/guitar-effect.sock` before launching the web server or client.
 
 ```sh
@@ -37,6 +41,8 @@ The engine socket defaults to `/run/guitar-effect.sock`. Set `PEDAL_CONTROL_SOCK
 ./build/release/pedalctl toggle
 ./build/release/pedalctl lv2-list
 ./build/release/pedalctl lv2-load 'http://example.org/plugin-uri'
+./build/release/pedalctl tuner on
+./build/release/pedalctl midi-events
 ```
 
-`pedal-footswitch` uses `gpiomon` from libgpiod to toggle the effect on GPIO 17. See [LV2 installation and import](docs/user/lv2-plugins.md), [live controls](docs/user/live-effect.md), [C architecture](docs/dev/architecture.md), and [LVGL preview](lvgl_ui/README.md).
+`pedal-footswitch` uses `gpiomon` from libgpiod to toggle the effect on GPIO 17. See [tuner and MIDI](docs/user/tuner-midi.md), [LV2 installation and import](docs/user/lv2-plugins.md), [live controls](docs/user/live-effect.md), [C architecture](docs/dev/architecture.md), and [LVGL preview](lvgl_ui/README.md).

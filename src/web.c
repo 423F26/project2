@@ -67,6 +67,10 @@ static char *command_for(const char *path, json_object *o) {
         double value;
         if(!field_number(o, "amount", &value) || value < 0 || value > 1) return NULL;
         snprintf(buffer, sizeof(buffer), "amount %.9g", value);
+    } else if(strcmp(path, "/api/tuner") == 0) {
+        json_object *value;
+        if(!json_object_object_get_ex(o, "enabled", &value) || !json_object_is_type(value, json_type_boolean)) return NULL;
+        strcpy(buffer, json_object_get_boolean(value) ? "tuner on" : "tuner off");
     } else if(strcmp(path, "/api/config") == 0) {
         const char *pedal = field_string(o, "pedal"), *setting = field_string(o, "setting");
         double value;
@@ -100,8 +104,10 @@ static void handle(int fd, const char *html) {
     char method[8], path[128];
     if(sscanf(request, "%7s %127s", method, path) != 2) { response(fd, 400, "application/json", "{\"error\":\"Bad request\"}"); return; }
     if(strcmp(method, "GET") == 0 && strcmp(path, "/") == 0) { response(fd, 200, "text/html; charset=utf-8", html); return; }
-    if(strcmp(method, "GET") == 0 && (strcmp(path, "/api/state") == 0 || strcmp(path, "/api/lv2") == 0)) {
-        char *reply = pedal_send(strcmp(path, "/api/lv2") == 0 ? "lv2-list" : "state");
+    if(strcmp(method, "GET") == 0 && (strcmp(path, "/api/state") == 0 || strcmp(path, "/api/lv2") == 0 || strcmp(path, "/api/midi") == 0)) {
+        const char *command = strcmp(path, "/api/lv2") == 0 ? "lv2-list" :
+                              strcmp(path, "/api/midi") == 0 ? "midi-events" : "state";
+        char *reply = pedal_send(command);
         if(!reply) response(fd, 503, "application/json", "{\"error\":\"Pedal engine unavailable\"}");
         else if(strncmp(reply, "error:", 6) == 0) response(fd, 503, "application/json", "{\"error\":\"Pedal engine error\"}");
         else response(fd, 200, "application/json", reply);

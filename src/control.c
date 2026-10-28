@@ -8,7 +8,7 @@
 int main(int argc, char **argv)
 {
     if(argc < 2) {
-        fprintf(stderr, "Usage: pedalctl <status|state|clean|effect|toggle|amount|board|config|lv2-list|lv2-load> [arguments]\n");
+        fprintf(stderr, "Usage: pedalctl <status|state|clean|effect|toggle|amount|board|config|tuner|midi-events|lv2-list|lv2-load> [arguments]\n");
         return 2;
     }
     char command[4096] = "";
