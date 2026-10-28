@@ -4,11 +4,13 @@ The [LV2 plugins ultimate list](https://github.com/alex-tee/lv2-plugins-ultimate
 
 ## 1. Install the plugin and LV2 host library
 
-On Debian or Raspberry Pi OS, install the Lilv runtime used by this app:
+On Debian or Raspberry Pi OS, install the native engine's build dependencies:
 
 ```bash
 sudo apt update
-sudo apt install liblilv-0-0
+sudo apt install cmake build-essential pkg-config libasound2-dev liblilv-dev libjson-c-dev
+cmake -S native_pedal -B build/native -DCMAKE_BUILD_TYPE=Release
+cmake --build build/native -j
 ```
 
 Install a plugin from your distribution's packages if available, or build it using the linked project's own instructions for your machine's CPU architecture. The result should be an LV2 bundle (a directory usually ending in `.lv2` and containing `manifest.ttl`). Standard Unix locations include `~/.lv2` for one user and `/usr/local/lib/lv2` or `/usr/lib/lv2` system-wide. Lilv also honors `LV2_PATH` for other locations. See the [LV2 bundle location specification](https://lv2plug.in/pages/filesystem-hierarchy-standard.html) and [Lilv discovery documentation](https://drobilla.net/docs/lilv/).

@@ -6,13 +6,16 @@ Use Python 3.11 or newer. From the repository root:
 
 ```bash
 uv sync
+cmake -S native_pedal -B build/native -DCMAKE_BUILD_TYPE=Release
+cmake --build build/native -j
+ctest --test-dir build/native --output-on-failure
 uv run python -m unittest discover -s tests
 uv run pedal --help
 ```
 
-The package and `pedal` entry point are declared in `pyproject.toml`; dependency versions are locked in `uv.lock`. The tests use `unittest`. `tests/test_effect.py` checks DSP state, mode fading, socket control, and parser defaults. `tests/test_pitch_classifier.py` checks WAV reading, feature extraction, classifier behavior, streaming frames, and interactive settings.
+The package and `pedal` entry point are declared in `pyproject.toml`; dependency versions are locked in `uv.lock`. Build the C engine with `cmake -S native_pedal -B build/native -DCMAKE_BUILD_TYPE=Release && cmake --build build/native -j`. Run `ctest --test-dir build/native --output-on-failure` for native DSP checks. Python tests use `unittest`; `tests/test_effect.py` checks the native socket, LV2 import, browser API, and launcher defaults. `tests/test_pitch_classifier.py` checks WAV reading, feature extraction, classifier behavior, streaming frames, and interactive settings.
 
-GitHub Actions runs this test suite on every push with Python 3.11 and the locked dependencies in `uv.lock`.
+GitHub Actions builds the C engine, runs CTest, and runs the Python tests on every push.
 
 ## Documentation website
 
@@ -31,8 +34,8 @@ These tests do not validate an ALSA device, physical GPIO switch, MIDI port, or 
 
 | Change | Main files | Follow-up check |
 | --- | --- | --- |
-| ALSA device selection or stream parameters | `alsa_pcm.py`, `effect.py` | `pedal effect --list-devices`, then a manual capture/playback check |
-| Pedal graph order, fuzz/overdrive, or bypass transition | `processing.py`, `effect.py` | `test_effect.py`, then listen for level and click changes |
+| ALSA device selection or stream parameters | `native_pedal/main.c` | `pedal effect --list-devices`, then a manual capture/playback check |
+| Pedal graph order, effects, or bypass transition | `native_pedal/dsp.c` | CTest and `test_effect.py`, then listen for level and click changes |
 | Mode, amount, footswitch, or browser control | `control.py`, `footswitch.py`, `demo_ui.py` | Local socket tests, then target Pi control check |
 | Dataset names or labels | `dataset.py`, `cli.py` | Scan representative files and check label counts |
 | Audio decoding or feature extraction | `audio.py`, `features.py` | Synthetic WAV tests, then train and predict against representative recordings |

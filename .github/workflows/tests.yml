@@ -17,5 +17,11 @@ jobs:
           python-version: "3.11"
       - name: Install dependencies
         run: uv sync --locked
+      - name: Install native build dependencies
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev liblilv-dev libjson-c-dev pkg-config
+      - name: Build native pedal
+        run: cmake -S native_pedal -B build/native -DCMAKE_BUILD_TYPE=Release && cmake --build build/native -j 2
+      - name: Test native pedal
+        run: ctest --test-dir build/native --output-on-failure
       - name: Run tests
         run: uv run python -m unittest discover -s tests

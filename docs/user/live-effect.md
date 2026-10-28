@@ -1,5 +1,18 @@
 # Live guitar effect
 
+The audio engine, built-in effects, ALSA streaming, LV2 hosting, and control
+socket run in C. Build it before using `pedal effect`:
+
+```bash
+sudo apt install cmake build-essential pkg-config libasound2-dev liblilv-dev libjson-c-dev
+cmake -S native_pedal -B build/native -DCMAKE_BUILD_TYPE=Release
+cmake --build build/native -j
+```
+
+The Python `pedal` command launches the compiled `build/native/pedal-engine`.
+You can also run that binary directly with the same options. Rebuild after
+changing native source files.
+
 ## Audio setup
 
 Connect the guitar to a USB audio interface capture input and headphones or speakers to a playback output. On the Linux machine with the interface, list the available ALSA names, then pass the appropriate capture and playback names:

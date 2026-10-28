@@ -19,6 +19,7 @@ nav:
       - Architecture: docs/dev/architecture.md
       - Development workflow: docs/dev/development.md
       - Live audio and control: docs/dev/live-audio.md
+      - Native pedal engine: native_pedal/README.md
       - Classifier internals: docs/dev/classifier.md
   - Touchscreen UI: lvgl_ui/README.md
   - Hardware:

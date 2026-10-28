@@ -1,7 +1,7 @@
 # ML Guitar Pedal
 
-Python tools for two separate workflows: live Raspberry Pi guitar effects
-effect, and an offline K-nearest-neighbors (KNN) pitch classifier for labeled
+This project has a native C guitar pedal engine for Raspberry Pi and Python
+tools for an offline K-nearest-neighbors (KNN) pitch classifier of labeled
 clean-tone recordings under `data/clean/`. The live effect does not load or use
 the trained classifier. An experimental audio-to-MIDI command triggers a fixed
 note from volume; it does not transcribe pitch.
@@ -17,18 +17,26 @@ note from volume; it does not transcribe pitch.
 
 ## Requirements and setup
 
-Use Python 3.11 or newer and [uv](https://docs.astral.sh/uv/). Run commands
-from the repository root. `uv sync` installs the Python dependencies from
-`pyproject.toml` and `uv.lock`. On a target Pi, the live effect also needs Linux
-ALSA, `libasound.so.2`, and a USB interface with a guitar capture input and
-headphone or line playback output. `footswitch` additionally needs `gpiomon`
-from libgpiod and `stdbuf` from GNU coreutils. `audio-to-midi` needs ALSA's
-`arecord` from `alsa-utils` and an available MIDI output port.
+Use Python 3.11 or newer and [uv](https://docs.astral.sh/uv/) for the CLI and
+offline tools. The live pedal is compiled from `native_pedal/` with CMake, ALSA,
+Lilv, and json-c development libraries. On Debian or Raspberry Pi OS, install
+`cmake`, `build-essential`, `pkg-config`, `libasound2-dev`, `liblilv-dev`, and
+`libjson-c-dev`. Run these commands from the repository root:
 
 ```bash
+sudo apt install cmake build-essential pkg-config libasound2-dev liblilv-dev libjson-c-dev
+cmake -S native_pedal -B build/native -DCMAKE_BUILD_TYPE=Release
+cmake --build build/native -j
 uv sync
 uv run pedal --help
 ```
+
+`pedal effect` now launches the C binary. Set `PEDAL_ENGINE_BIN` to an installed
+`pedal-engine` path when running outside this checkout. The live effect also
+needs a USB interface with a guitar capture input and
+headphone or line playback output. `footswitch` additionally needs `gpiomon`
+from libgpiod and `stdbuf` from GNU coreutils. `audio-to-midi` needs ALSA's
+`arecord` from `alsa-utils` and an available MIDI output port.
 
 With the package installed in another Python environment, use `pedal` instead
 of `uv run pedal`. The module entry point is `python -m ml_guitar_pedal.cli`.
@@ -296,12 +304,13 @@ For the full option list of an offline command, run `uv run pedal train --help`
 ## Tests
 
 ```bash
+ctest --test-dir build/native --output-on-failure
 uv run python -m unittest discover -s tests
 ```
 
-The tests cover audio and feature extraction, model behavior, effect
-processing, local mode control, and CLI defaults. They do not exercise physical
-ALSA, GPIO, MIDI, or browser hardware paths. See
+The tests cover native effect processing, the local socket and browser API,
+classifier behavior, and CLI defaults. They do not exercise physical ALSA,
+GPIO, MIDI, or a Pi touchscreen. See
 [the architecture guide](docs/dev/architecture.md) for the module and data-flow
 map. The [agile plan](docs/agile/README.md) links the current planning
 spreadsheets and explains their limits.

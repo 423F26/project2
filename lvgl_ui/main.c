@@ -117,7 +117,8 @@ static bool command(const char * request, char * reply, size_t reply_size)
     setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
 
     struct sockaddr_un address = {.sun_family = AF_UNIX};
-    snprintf(address.sun_path, sizeof(address.sun_path), "%s", CONTROL_SOCKET);
+    const char *path = getenv("PEDAL_CONTROL_SOCKET");
+    snprintf(address.sun_path, sizeof(address.sun_path), "%s", path && *path ? path : CONTROL_SOCKET);
     bool ok = connect(fd, (struct sockaddr *)&address, sizeof(address)) == 0;
     if(ok) ok = send(fd, request, strlen(request), 0) == (ssize_t)strlen(request);
     size_t used = 0;

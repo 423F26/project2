@@ -11,6 +11,8 @@ uv run pedal --help
 
 The commands in these guides assume `uv` and the repository root as the working directory. If you installed the package in another Python environment, replace `uv run pedal` with `pedal`. You can also invoke `python -m ml_guitar_pedal.cli`.
 
+Before running the live effect, build its C engine as shown in the [live effect guide](live-effect.md). The classifier commands remain Python tools.
+
 ## Choose a workflow
 
 - [Live effect](live-effect.md): Linux ALSA, `libasound.so.2`, and a USB interface with a guitar input and playback output. The Raspberry Pi 3 headphone jack cannot capture guitar audio.
