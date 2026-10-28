@@ -58,9 +58,15 @@
   .row { display: flex; justify-content: space-between; align-items: center; margin: 32px 0 12px; font-weight: 600; }
   input[type=range] { width: 100%; accent-color: #20c68a; cursor: pointer; }
   .hint { margin-top: 25px; font-size: .9rem; min-height: 1.3em; }
-  .tuner { margin: 22px 0 4px; padding: 19px 20px; border: 1px solid #46616a; border-radius: 16px; background: radial-gradient(circle at 50% 0, #28433c, #17252d 72%); box-shadow: inset 0 1px 0 #ffffff24; }
-  .tuner-head { display: flex; align-items: center; justify-content: space-between; }
-  .tuner-head h2 { margin: 0; font-size: 1.1rem; letter-spacing: .07em; text-transform: uppercase; }
+  .tuner { margin: 0; padding: 0; border: 1px solid #46616a; border-radius: 16px; background: radial-gradient(circle at 50% 0, #28433c, #17252d 72%); box-shadow: inset 0 1px 0 #ffffff24; }
+  .tuner-summary { display: flex; align-items: center; gap: 12px; padding: 17px 20px; list-style: none; font-size: 1rem; }
+  .tuner-summary::-webkit-details-marker { display: none; }
+  .tuner-title { margin-right: auto; font-size: 1.05rem; font-weight: 750; letter-spacing: .07em; text-transform: uppercase; }
+  .tuner-summary-status { color: #b6c7c8; font-size: .88rem; font-weight: 500; }
+  .tuner-chevron { color: #8ce0be; transition: transform .16s; }
+  .tuner[open] .tuner-chevron { transform: rotate(180deg); }
+  .tuner-body { padding: 0 20px 19px; }
+  .tuner-controls { display: flex; align-items: center; justify-content: space-between; padding-top: 13px; border-top: 1px solid #46616a; color: #b6c7c8; font-size: .88rem; }
   button.tuner-toggle { width: auto; min-height: 34px; padding: 0 14px; border: 1px solid #6ea995; border-radius: 8px; background: #214a40; color: #e5fff3; font-size: .82rem; }
   button.tuner-toggle.off { border-color: #637782; background: #34444b; color: #d1dadd; }
   .tuner-readout { display: flex; align-items: baseline; gap: 18px; min-height: 66px; }
@@ -78,12 +84,6 @@
   <h1>Guitar Pedal Board</h1>
   <p>Build the signal path from input to output</p>
   <button id="toggle" type="button" aria-pressed="true">Signal ON</button>
-  <section class="tuner" aria-labelledby="tuner-title">
-    <div class="tuner-head"><h2 id="tuner-title">Tuner</h2><button id="tuner-toggle" class="tuner-toggle" type="button" aria-pressed="true">On</button></div>
-    <div class="tuner-readout"><strong id="tuner-note" aria-live="polite">—</strong><span id="tuner-frequency">Waiting for input</span></div>
-    <div class="tuner-scale" aria-hidden="true"><span>♭</span><div class="tuner-track"><div id="tuner-needle" class="tuner-needle"></div></div><span>♯</span></div>
-    <output id="tuner-cents" class="tuner-cents">Play a single note to tune</output>
-  </section>
   <p id="path" class="path">INPUT → OVERDRIVE → OUTPUT</p>
   <h2>Active board</h2>
   <div id="board" class="board"></div>
@@ -96,6 +96,15 @@
   <div class="row"><label for="amount">Effect amount</label><output id="value">100%</output></div>
   <input id="amount" type="range" min="0" max="100" value="100" aria-label="Effect amount">
   <p id="status" class="hint" role="status">Connecting…</p>
+  <details class="tuner" id="tuner-panel">
+    <summary class="tuner-summary"><span class="tuner-title">Tuner</span><span id="tuner-summary-status" class="tuner-summary-status">Waiting for input</span><span class="tuner-chevron" aria-hidden="true">▾</span></summary>
+    <div class="tuner-body">
+      <div class="tuner-controls"><span>Pitch tracking</span><button id="tuner-toggle" class="tuner-toggle" type="button" aria-pressed="true">On</button></div>
+      <div class="tuner-readout"><strong id="tuner-note" aria-live="polite">—</strong><span id="tuner-frequency">Waiting for input</span></div>
+      <div class="tuner-scale" aria-hidden="true"><span>♭</span><div class="tuner-track"><div id="tuner-needle" class="tuner-needle"></div></div><span>♯</span></div>
+      <output id="tuner-cents" class="tuner-cents">Play a single note to tune</output>
+    </div>
+  </details>
 </main>
 <dialog id="config"><h2 id="config-title"></h2><div id="config-fields"></div><button id="config-close" type="button">Close</button></dialog>
 <dialog id="import-dialog"><h2>Import LV2 effect</h2>
@@ -111,6 +120,7 @@ const tunerNote = document.getElementById('tuner-note');
 const tunerFrequency = document.getElementById('tuner-frequency');
 const tunerCents = document.getElementById('tuner-cents');
 const tunerNeedle = document.getElementById('tuner-needle');
+const tunerSummaryStatus = document.getElementById('tuner-summary-status');
 const board = document.getElementById('board');
 const library = document.getElementById('pedal-library');
 const search = document.getElementById('search');
@@ -171,6 +181,8 @@ function renderTuner(tuner) {
   tunerCents.textContent = tunerEnabled && tuner?.note ?
     (Math.abs(cents) <= 5 ? 'In tune' : `${Math.abs(cents).toFixed(1)} cents ${cents < 0 ? 'flat' : 'sharp'}`) :
     (tunerEnabled ? 'Play a single note to tune' : 'Pitch tracking paused');
+  tunerSummaryStatus.textContent = !tunerEnabled ? 'Off' : tuner?.note ?
+    `${tuner.note} · ${tunerCents.textContent}` : 'Waiting for input';
 }
 function action(label, description, callback, disabled = false) {
   const button = document.createElement('button');

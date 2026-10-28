@@ -1,6 +1,6 @@
 # Tuner and MIDI events
 
-The tuner listens to the mono guitar input before Overdrive, Fuzz, or other effects. In the browser, play one note and read the nearest note name, detected frequency, and cents flat or sharp. The center of the meter is in tune within 5 cents. Tuning uses A4 = 440 Hz and detects roughly 65–1200 Hz. It needs about 100 ms of stable signal before a new reading appears; noisy or polyphonic input may not yield a reliable note.
+The tuner listens to the mono guitar input before Overdrive, Fuzz, or other effects. Expand **Tuner** at the bottom of the browser panel, play one note, and read the nearest note name, detected frequency, and cents flat or sharp. The center of the meter is in tune within 5 cents. Tuning uses A4 = 440 Hz and detects roughly 65–1200 Hz. It needs about 100 ms of stable signal before a new reading appears; noisy or polyphonic input may not yield a reliable note.
 
 Tracking is on by default. Use the browser's **Tuner** switch, `pedalctl tuner off`, or `pedal-engine --no-tuner` to disable it. Disabling tracking sends a note-off for any active internal MIDI note.
 
