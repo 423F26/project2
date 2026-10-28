@@ -9,7 +9,7 @@ note from volume; it does not transcribe pitch.
 ## Documentation
 
 - [Documentation website](https://423f26.github.io/project2/): browse all guides and download planning and hardware documents.
-- [User guides](docs/user/README.md): setup, live effect, pitch classifier, and audio-to-MIDI.
+- [User guides](docs/user/README.md): setup, live effect, LV2 plugins, pitch classifier, and audio-to-MIDI.
 - [LVGL touchscreen preview](lvgl_ui/README.md): native desktop demo of the pedal controls.
 - [Developer guides](docs/dev/README.md): architecture, development checks, live control, and classifier internals.
 - [Agile plan](docs/agile/README.md): the current project backlog, ESOF-aligned sprint plan, and burndown.
@@ -56,8 +56,7 @@ ssh -L 8765:127.0.0.1:8765 pi-host 'cd /path/to/project2 && uv run pedal demo-ui
 ```
 
 Keep that SSH terminal open and visit `http://127.0.0.1:8765` in a browser.
-The page can add or remove fuzz and overdrive from the signal path, reverse their
-slot positions, edit each pedal through its cog, bypass the board, and adjust the global effect mix. The demo
+The page has an active board that grows as pedals are added from a searchable library. It can reorder or remove pedals, edit each pedal through its cog, bypass the board, and adjust the global effect mix. The demo
 uses the running pedal if one is already active, or starts it if needed. When
 the SSH command ends, it stops only an effect process that it started itself.
 The UI binds to `127.0.0.1` on the Pi. When it starts the effect, it uses the
@@ -68,7 +67,8 @@ an output. An already-running effect keeps its current output; stop it first
 or start `pedal effect` with explicit devices before opening the UI. The default
 UI port is 8765; if you set `--port`, update the SSH tunnel as well.
 
-The `effect` command processes the guitar input with overdrive or hard-clipped fuzz,
+The `effect` command processes the guitar input with overdrive, hard-clipped fuzz,
+delay, tremolo, or chorus,
 then plays it through the interface output. It chooses the first capture device
 and its matching playback device when available. To select devices explicitly:
 
@@ -83,16 +83,48 @@ uv run pedal mode toggle  # switch clean/effect
 uv run pedal mode clean   # clean guitar
 uv run pedal mode effect  # enable the board
 uv run pedal mode board fuzz,overdrive  # run both in this order
-uv run pedal mode board -  # remove both pedals
-uv run pedal mode slots -,fuzz  # leave fuzz in the right slot
+uv run pedal mode board overdrive,fuzz,delay,tremolo,chorus  # five-pedal chain
+uv run pedal mode board -  # clear the board
 uv run pedal mode config fuzz drive 25  # set fuzz drive
 uv run pedal mode fuzz    # shortcut: board with only fuzz
 uv run pedal mode overdrive  # shortcut: board with only overdrive
+uv run pedal mode delay   # shortcut: board with only delay
+uv run pedal mode tremolo # shortcut: board with only tremolo
+uv run pedal mode chorus  # shortcut: board with only chorus
+uv run pedal mode config delay time 450  # delay time in milliseconds
+uv run pedal mode config tremolo rate 6  # tremolo cycles per second
+uv run pedal mode config chorus depth 0.7
 uv run pedal mode         # show current mode
 ```
 
 The change fades over 10 ms to avoid a click, and audio keeps streaming.
 The effect and control commands communicate through `/run/guitar-effect.sock`.
+
+The browser demo UI shows all five built-in pedals and offers **Import effect**
+for compatible installed LV2 plugins while audio runs. The native LVGL preview shows all five built-in pedals; loaded LV2 effects appear in the browser UI and CLI.
+
+### Installed LV2 effects
+
+For full installation steps and the **Import effect** button, see [Add LV2 plugins](docs/user/lv2-plugins.md).
+
+The [LV2 ultimate list](https://github.com/alex-tee/lv2-plugins-ultimate-list) is a
+catalog of projects, not an installable bundle. Install `liblilv-0-0` and a
+listed plugin's LV2 package for your Pi's architecture, then discover effects
+the pedal can host:
+
+```bash
+uv run pedal effect --list-lv2
+uv run pedal effect --input plughw:1,0 --output plughw:1,0 \
+  --lv2 'http://guitarix.sourceforge.net/plugins/gx_aclipper_#_aclipper_'
+uv run pedal mode board lv2-1,delay
+```
+
+Repeat `--lv2 URI` to load more effects as `lv2-2`, `lv2-3`, and so on. The
+browser UI shows their plugin names and control ports. This host accepts mono
+effects with one audio input, one audio output, control ports, and no required
+host features. Stereo, MIDI, Atom, and plugins requiring host extensions are
+excluded from `--list-lv2`. Plugin code runs in the audio process, so test new
+plugins on your Pi before relying on them for a live performance.
 The effect process must be able to create a socket there, and control/UI
 processes need access to it. On systems where a regular account cannot write
 to `/run`, arrange appropriate deployment permissions for this fixed path

@@ -41,8 +41,8 @@ DEFAULT_STREAM_FRAME_SECONDS = 0.064
 DEFAULT_STREAM_HOP_SECONDS = 0.032
 RASPBERRY_PI_TARGET_MS = 30.0
 LIVE_COMMANDS = {
-    "effect": ("ml_guitar_pedal.effect", "Play live guitar through overdrive or fuzz."),
-    "mode": ("ml_guitar_pedal.control", "Switch clean/effect mode or select overdrive/fuzz."),
+    "effect": ("ml_guitar_pedal.effect", "Play live guitar through built-in and installed LV2 effects."),
+    "mode": ("ml_guitar_pedal.control", "Switch clean/effect mode or edit the pedal board."),
     "footswitch": ("ml_guitar_pedal.footswitch", "Toggle the live effect from a GPIO17 momentary switch."),
     "demo-ui": ("ml_guitar_pedal.demo_ui", "Control the live effect from a local browser over SSH."),
 }

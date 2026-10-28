@@ -21,27 +21,53 @@ PAGE = """<!doctype html>
 <style>
   :root { color-scheme: dark; font-family: system-ui, sans-serif; }
   body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #11171c; color: #eef5f3; }
-  main { box-sizing: border-box; width: min(440px, calc(100% - 32px)); padding: 28px; border: 1px solid #34444b; border-radius: 20px; background: #1d282e; box-shadow: 0 20px 60px #0005; }
+  main { box-sizing: border-box; width: min(760px, calc(100% - 32px)); padding: 28px; border: 1px solid #34444b; border-radius: 20px; background: #1d282e; box-shadow: 0 20px 60px #0005; }
   h1 { margin: 0 0 6px; font-size: 1.65rem; }
   p { color: #b6c7c8; margin: 0 0 26px; }
   button { width: 100%; min-height: 88px; border: 0; border-radius: 15px; background: #20c68a; color: #082c25; font: 700 1.55rem system-ui; cursor: pointer; }
   button.clean { background: #637782; color: white; }
-  button.pedal { min-height: 52px; margin-top: 12px; background: #34444b; color: #eef5f3; font-size: 1.1rem; }
-  button.pedal.on { background: #20c68a; color: #082c25; }
-  button.pedal.fuzz.on { background: #f0b968; color: #262018; }
-  .pedal-row { display: grid; grid-template-columns: 1fr 52px; gap: 8px; align-items: end; }
-  .pedal-row button.pedal { width: 100%; }
-  button.gear { min-height: 52px; margin-top: 12px; background: #34444b; color: #eef5f3; font-size: 1.4rem; }
-  .slot { margin: 10px 0; color: #b6c7c8; font-size: .9rem; }
+  .board { display: flex; gap: 14px; overflow-x: auto; padding: 12px 3px 22px; min-height: 154px; }
+  .board-card { --pedal-accent: #76d6bc; flex: 0 0 172px; min-height: 124px; padding: 13px; position: relative; overflow: hidden; border: 1px solid color-mix(in srgb, var(--pedal-accent) 55%, #24333a); border-radius: 15px; background: linear-gradient(155deg, color-mix(in srgb, var(--pedal-accent) 22%, #25343d), #17242d 78%); box-shadow: inset 0 2px 0 #ffffff20, inset 0 -5px 12px #0005, 0 6px 0 #0b141a, 0 9px 16px #0005; }
+  .board-card::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 5px; background: var(--pedal-accent); box-shadow: 0 0 15px var(--pedal-accent); }
+  .pedal-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-left: 6px; }
+  .pedal-kind { color: var(--pedal-accent); font-size: .63rem; letter-spacing: .18em; font-weight: 800; text-transform: uppercase; }
+  .pedal-led { flex: 0 0 10px; width: 10px; height: 10px; border: 2px solid #eafff5a8; border-radius: 50%; background: var(--pedal-accent); box-shadow: 0 0 10px var(--pedal-accent), 0 0 18px var(--pedal-accent); }
+  .board-card strong { display: block; min-height: 49px; margin: 13px 0 4px 6px; font-size: 1.16rem; line-height: 1.1; overflow-wrap: anywhere; }
+  .actions { display: flex; gap: 6px; }
+  .actions button { min-height: 38px; border: 1px solid #ffffff19; border-radius: 9px; font-size: .95rem; background: #0b1821aa; color: #eef5f3; box-shadow: inset 0 1px 0 #ffffff1a; }
+  .actions button:hover:not(:disabled) { background: color-mix(in srgb, var(--pedal-accent) 26%, #20313a); }
+  .actions button:disabled { opacity: .4; cursor: default; }
+  .empty { align-self: center; color: #b6c7c8; }
+  details { border-top: 1px solid #34444b; padding-top: 15px; }
+  summary { cursor: pointer; font-weight: 700; font-size: 1.15rem; }
+  #search { box-sizing: border-box; width: 100%; margin-top: 14px; padding: 10px; border: 1px solid #637782; border-radius: 8px; background: #11171c; color: #eef5f3; }
+  .library { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; margin-top: 12px; }
+  .library button { --pedal-accent: #76d6bc; min-height: 66px; padding: 10px 12px; text-align: left; border: 1px solid #ffffff19; border-left: 4px solid var(--pedal-accent); border-radius: 10px; background: linear-gradient(130deg, color-mix(in srgb, var(--pedal-accent) 16%, #273740), #273740); color: #eef5f3; font-size: .95rem; box-shadow: inset 0 1px 0 #ffffff16, 0 3px 0 #0b141a; }
+  .library button:hover:not(:disabled) { filter: brightness(1.15); transform: translateY(-1px); }
+  .library-name { display: block; font-weight: 700; }
+  .library-kind { display: block; margin-top: 3px; color: var(--pedal-accent); font-size: .66rem; letter-spacing: .14em; text-transform: uppercase; }
+  .library button:disabled { opacity: .55; cursor: default; }
+  button.import-effect { min-height: 42px; width: auto; margin-top: 12px; padding: 0 16px; border: 1px solid #79d7c0; border-radius: 10px; background: #17473e; color: #d9fff4; font-size: .92rem; box-shadow: inset 0 1px 0 #ffffff24; }
+  button.import-effect:hover { background: #1c6053; }
+  button.more { min-height: 38px; margin-top: 10px; background: transparent; border: 1px solid #637782; color: #eef5f3; font-size: .9rem; }
   dialog { width: min(360px, calc(100% - 48px)); border: 1px solid #637782; border-radius: 16px; padding: 24px; background: #1d282e; color: #eef5f3; }
   dialog::backdrop { background: #000a; }
   dialog h2 { margin: 0 0 16px; }
   dialog .setting { margin: 15px 0; }
   dialog .setting label { display: flex; justify-content: space-between; }
   dialog button { min-height: 44px; font-size: 1rem; }
-  button.swap { min-height: 42px; margin-top: 12px; background: transparent; border: 1px solid #637782; color: #eef5f3; font-size: 1rem; }
-  button.swap[hidden] { display: none; }
+  #import-dialog { width: min(580px, calc(100% - 48px)); max-height: min(720px, calc(100vh - 64px)); }
+  #import-dialog p { margin: 0 0 14px; }
+  #import-search { box-sizing: border-box; width: 100%; padding: 10px; margin: 4px 0 12px; border: 1px solid #637782; border-radius: 8px; background: #11171c; color: #eef5f3; }
+  #import-list { max-height: 360px; overflow-y: auto; display: grid; gap: 8px; }
+  .import-item { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid #40545d; border-radius: 10px; background: #213039; }
+  .import-item small { display: block; max-width: 360px; margin-top: 3px; color: #91abb0; overflow-wrap: anywhere; }
+  .import-item button { width: auto; min-width: 76px; min-height: 38px; padding: 0 10px; background: #2d9d7d; color: #071e19; font-size: .9rem; }
+  .import-item button:disabled { background: #3b5352; color: #c4d4d0; }
+  #import-status { min-height: 1.3em; margin: 12px 0; color: #b8d7ce; }
+  #import-close { background: #34444b; color: #eef5f3; }
   .path { margin: 18px 0 12px; font-weight: 600; color: #eef5f3; }
+  @media (prefers-reduced-motion: no-preference) { .library button, .actions button { transition: transform .15s, filter .15s, background .15s; } }
   button:focus-visible, input:focus-visible { outline: 3px solid #f5d562; outline-offset: 3px; }
   .row { display: flex; justify-content: space-between; align-items: center; margin: 32px 0 12px; font-weight: 600; }
   input[type=range] { width: 100%; accent-color: #20c68a; cursor: pointer; }
@@ -54,22 +80,36 @@ PAGE = """<!doctype html>
   <p>Build the signal path from input to output</p>
   <button id="toggle" type="button" aria-pressed="true">Signal ON</button>
   <p id="path" class="path">INPUT → OVERDRIVE → OUTPUT</p>
-  <p id="slots" class="slot">Slot 1: Overdrive · Slot 2: Empty</p>
-  <div class="pedal-row"><button id="overdrive" class="pedal" type="button" aria-pressed="true">Overdrive on board</button><button id="overdrive-gear" class="gear" type="button" aria-label="Overdrive settings">⚙</button></div>
-  <div class="pedal-row"><button id="fuzz" class="pedal fuzz" type="button" aria-pressed="false">Add fuzz</button><button id="fuzz-gear" class="gear" type="button" aria-label="Fuzz settings">⚙</button></div>
-  <button id="swap" class="swap" type="button" hidden>Reverse pedal order</button>
+  <h2>Active board</h2>
+  <div id="board" class="board"></div>
+  <details id="library-panel" open><summary>Pedal library</summary>
+    <button id="import-effect" class="import-effect" type="button">＋ Import effect</button>
+    <input id="search" type="search" placeholder="Search pedals" aria-label="Search pedal library">
+    <div id="pedal-library" class="library"></div>
+    <button id="show-more" class="more" type="button" hidden>Show all pedals</button>
+  </details>
   <div class="row"><label for="amount">Effect amount</label><output id="value">100%</output></div>
   <input id="amount" type="range" min="0" max="100" value="100" aria-label="Effect amount">
   <p id="status" class="hint" role="status">Connecting…</p>
 </main>
 <dialog id="config"><h2 id="config-title"></h2><div id="config-fields"></div><button id="config-close" type="button">Close</button></dialog>
+<dialog id="import-dialog"><h2>Import LV2 effect</h2>
+  <p>Choose a compatible LV2 plugin installed on this audio machine. Find more projects in the <a href="https://github.com/alex-tee/lv2-plugins-ultimate-list" target="_blank" rel="noopener noreferrer">LV2 plugin catalog</a>; install a plugin before importing it here.</p>
+  <input id="import-search" type="search" placeholder="Search installed effects" aria-label="Search installed LV2 effects">
+  <div id="import-list"></div><p id="import-status" role="status"></p>
+  <button id="import-close" type="button">Close</button>
+</dialog>
 <script>
 const toggle = document.getElementById('toggle');
-const overdrive = document.getElementById('overdrive');
-const fuzz = document.getElementById('fuzz');
-const swap = document.getElementById('swap');
+const board = document.getElementById('board');
+const library = document.getElementById('pedal-library');
+const search = document.getElementById('search');
+const showMore = document.getElementById('show-more');
+const importDialog = document.getElementById('import-dialog');
+const importSearch = document.getElementById('import-search');
+const importList = document.getElementById('import-list');
+const importStatus = document.getElementById('import-status');
 const path = document.getElementById('path');
-const slotsText = document.getElementById('slots');
 const config = document.getElementById('config');
 const configTitle = document.getElementById('config-title');
 const configFields = document.getElementById('config-fields');
@@ -77,30 +117,146 @@ const amount = document.getElementById('amount');
 const value = document.getElementById('value');
 const status = document.getElementById('status');
 let enabled = true;
-let slots = ['overdrive', null];
+let pedals = ['overdrive'];
+let libraryExpanded = false;
 let settings = {};
+let available = {};
 let dragging = false;
 let timer;
+let installedEffects = [];
+const pedalLooks = {
+  overdrive: {color: '#f6a868', kind: 'Drive'},
+  fuzz: {color: '#f3d46c', kind: 'Fuzz'},
+  delay: {color: '#80b9ff', kind: 'Time'},
+  tremolo: {color: '#d5a2ff', kind: 'Modulation'},
+  chorus: {color: '#89e1d3', kind: 'Modulation'}
+};
+function lookFor(name) { return pedalLooks[name] || {color: '#ed9eb0', kind: 'LV2 effect'}; }
 function render(state) {
   enabled = state.enabled;
-  slots = state.slots || [...(state.pedals || [state.effect_type || 'overdrive']), null].slice(0, 2);
+  pedals = state.pedals || [];
   settings = state.settings || {};
-  const pedals = slots.filter(Boolean);
+  available = state.available || {};
+  renderBoard();
+  renderLibrary();
   toggle.textContent = enabled ? 'Signal ON' : 'Bypassed';
   toggle.classList.toggle('clean', !enabled);
   toggle.setAttribute('aria-pressed', String(enabled));
-  path.textContent = ['INPUT', ...pedals.map(pedal => pedal.toUpperCase()), 'OUTPUT'].join(' → ');
-  slotsText.textContent = slots.map((pedal, index) => `Slot ${index + 1}: ${pedal || 'Empty'}`).join(' · ');
-  for (const [button, name] of [[overdrive, 'overdrive'], [fuzz, 'fuzz']]) {
-    const active = pedals.includes(name);
-    button.textContent = active ? `${name} on board` : `Add ${name}`;
-    button.classList.toggle('on', active);
-    button.setAttribute('aria-pressed', String(active));
-  }
-  swap.hidden = pedals.length === 0;
+  path.textContent = ['INPUT', ...pedals.map(pedal => available[pedal]?.name || pedal), 'OUTPUT'].join(' → ');
   if (!dragging) { amount.value = Math.round(state.amount * 100); value.textContent = amount.value + '%'; }
   status.textContent = enabled ? `${pedals.length} pedal${pedals.length === 1 ? '' : 's'} in signal path` : 'Signal is bypassed';
 }
+function action(label, description, callback, disabled = false) {
+  const button = document.createElement('button');
+  button.type = 'button'; button.textContent = label; button.title = description;
+  button.setAttribute('aria-label', description); button.disabled = disabled;
+  button.addEventListener('click', callback);
+  return button;
+}
+async function setBoard(next) {
+  try { await request('/api/board', {pedals: next}); }
+  catch (error) { status.textContent = error.message; }
+}
+function renderBoard() {
+  board.replaceChildren();
+  if (!pedals.length) {
+    const empty = document.createElement('span'); empty.className = 'empty';
+    empty.textContent = 'No pedals active. Add one from the library.'; board.append(empty);
+  }
+  pedals.forEach((name, index) => {
+    const card = document.createElement('div'); card.className = 'board-card';
+    const look = lookFor(name);
+    card.style.setProperty('--pedal-accent', look.color);
+    const top = document.createElement('div'); top.className = 'pedal-top';
+    const kind = document.createElement('span'); kind.className = 'pedal-kind'; kind.textContent = look.kind;
+    const led = document.createElement('span'); led.className = 'pedal-led'; led.setAttribute('aria-hidden', 'true');
+    top.append(kind, led);
+    const title = document.createElement('strong'); title.textContent = available[name]?.name || name;
+    const actions = document.createElement('div'); actions.className = 'actions';
+    const move = direction => {
+      const next = [...pedals];
+      [next[index], next[index + direction]] = [next[index + direction], next[index]];
+      setBoard(next);
+    };
+    actions.append(
+      action('←', `Move ${name} left`, () => move(-1), index === 0),
+      action('→', `Move ${name} right`, () => move(1), index === pedals.length - 1),
+      action('⚙', `${name} settings`, () => openConfig(name)),
+      action('×', `Remove ${name}`, () => setBoard(pedals.filter(p => p !== name)))
+    );
+    card.append(top, title, actions); board.append(card);
+  });
+}
+function renderLibrary() {
+  library.replaceChildren();
+  const query = search.value.trim().toLowerCase();
+  const matching = Object.entries(available).filter(([name, info]) =>
+    `${name} ${info.name}`.toLowerCase().includes(query));
+  const visible = query || libraryExpanded ? matching : matching.slice(0, 6);
+  for (const [name, info] of visible) {
+    const active = pedals.includes(name);
+    const look = lookFor(name);
+    const button = action(active ? `${info.name} on board` : `Add ${info.name}`,
+      `Add ${info.name} to board`, () => setBoard([...pedals, name]), active);
+    button.style.setProperty('--pedal-accent', look.color);
+    const label = document.createElement('span'); label.className = 'library-name';
+    label.textContent = active ? `${info.name} · on board` : `+ ${info.name}`;
+    const kind = document.createElement('span'); kind.className = 'library-kind'; kind.textContent = look.kind;
+    button.replaceChildren(label, kind);
+    library.append(button);
+  }
+  showMore.hidden = !!query || matching.length <= 6;
+  showMore.textContent = libraryExpanded ? 'Show fewer' : `Show all ${matching.length} pedals`;
+}
+search.addEventListener('input', renderLibrary);
+showMore.addEventListener('click', () => { libraryExpanded = !libraryExpanded; renderLibrary(); });
+function renderInstalled() {
+  importList.replaceChildren();
+  const query = importSearch.value.trim().toLowerCase();
+  const matches = installedEffects.filter(plugin => `${plugin.name} ${plugin.uri}`.toLowerCase().includes(query));
+  if (!matches.length) {
+    const message = document.createElement('p');
+    message.textContent = 'No compatible installed effects found.';
+    importList.append(message);
+  }
+  for (const plugin of matches) {
+    const item = document.createElement('div'); item.className = 'import-item';
+    const description = document.createElement('div');
+    const name = document.createElement('strong'); name.textContent = plugin.name;
+    const uri = document.createElement('small'); uri.textContent = plugin.uri;
+    description.append(name, uri);
+    const button = action(plugin.loaded_as || 'Import', `Import ${plugin.name}`, async () => {
+      button.disabled = true; importStatus.textContent = `Importing ${plugin.name}…`;
+      try {
+        await request('/api/import', {uri: plugin.uri});
+        libraryExpanded = true; renderLibrary();
+        importStatus.textContent = `${plugin.name} is in the pedal library. Add it to the active board when ready.`;
+        await refreshInstalled();
+      } catch (error) {
+        importStatus.textContent = error.message;
+        button.disabled = false;
+      }
+    }, !!plugin.loaded_as);
+    item.append(description, button); importList.append(item);
+  }
+}
+async function refreshInstalled() {
+  const response = await fetch('/api/lv2');
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error || 'Could not scan installed effects');
+  installedEffects = payload.plugins;
+  renderInstalled();
+}
+document.getElementById('import-effect').addEventListener('click', async () => {
+  importDialog.showModal();
+  importStatus.textContent = 'Scanning installed LV2 effects…';
+  try {
+    await refreshInstalled();
+    importStatus.textContent = `${installedEffects.length} compatible effect${installedEffects.length === 1 ? '' : 's'} found`;
+  } catch (error) { importStatus.textContent = error.message; }
+});
+importSearch.addEventListener('input', renderInstalled);
+document.getElementById('import-close').addEventListener('click', () => importDialog.close());
 async function request(path, data) {
   const options = data === undefined ? {} : {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)};
   const response = await fetch(path, options);
@@ -114,44 +270,33 @@ async function refresh() {
 toggle.addEventListener('click', async () => {
   try { await request('/api/mode', {enabled: !enabled}); } catch (error) { status.textContent = error.message; }
 });
-for (const [button, name] of [[overdrive, 'overdrive'], [fuzz, 'fuzz']]) {
-  button.addEventListener('click', async () => {
-    const next = [...slots];
-    const index = next.indexOf(name);
-    if (index >= 0) next[index] = null;
-    else if (next.indexOf(null) >= 0) next[next.indexOf(null)] = name;
-    try { await request('/api/slots', {slots: next}); }
-    catch (error) { status.textContent = error.message; }
-  });
-}
-swap.addEventListener('click', async () => {
-  try { await request('/api/slots', {slots: [...slots].reverse()}); }
-  catch (error) { status.textContent = error.message; }
-});
 const specs = {
   overdrive: [['drive', 1, 100, 1], ['tone', 100, 8000, 1], ['mix', 0, 1, .01], ['level', 0, 1, .01]],
-  fuzz: [['drive', 1, 100, 1], ['tone', 100, 8000, 1], ['level', 0, 1, .01]]
+  fuzz: [['drive', 1, 100, 1], ['tone', 100, 8000, 1], ['level', 0, 1, .01]],
+  delay: [['time', 20, 1500, 1], ['feedback', 0, .9, .01], ['mix', 0, 1, .01]],
+  tremolo: [['rate', .1, 20, .1], ['depth', 0, 1, .01]],
+  chorus: [['rate', .1, 5, .1], ['depth', 0, 1, .01], ['mix', 0, 1, .01]]
 };
-for (const name of ['overdrive', 'fuzz']) {
-  document.getElementById(name + '-gear').addEventListener('click', () => {
-    configTitle.textContent = name[0].toUpperCase() + name.slice(1) + ' settings';
-    configFields.replaceChildren();
-    for (const [key, min, max, step] of specs[name]) {
-      const row = document.createElement('div'); row.className = 'setting';
-      const label = document.createElement('label'); label.textContent = key[0].toUpperCase() + key.slice(1);
-      const output = document.createElement('output'); output.textContent = String(settings[name]?.[key] ?? min);
-      const slider = document.createElement('input'); slider.type = 'range';
-      Object.assign(slider, {min, max, step, value: settings[name]?.[key] ?? min});
-      slider.setAttribute('aria-label', `${name} ${key}`);
-      slider.addEventListener('input', () => { output.textContent = slider.value; });
-      slider.addEventListener('change', async () => {
-        try { await request('/api/config', {pedal: name, setting: key, value: Number(slider.value)}); }
-        catch (error) { status.textContent = error.message; }
-      });
-      label.append(output); row.append(label, slider); configFields.append(row);
-    }
-    config.showModal();
-  });
+function openConfig(name) {
+  configTitle.textContent = `${available[name].name} settings`;
+  configFields.replaceChildren();
+  const fields = specs[name] || Object.entries(available[name].ranges).map(([key, range]) =>
+    [key, range.min ?? 0, range.max ?? 100, .01]);
+  for (const [key, min, max, step] of fields) {
+    const row = document.createElement('div'); row.className = 'setting';
+    const label = document.createElement('label'); label.textContent = key[0].toUpperCase() + key.slice(1);
+    const output = document.createElement('output'); output.textContent = String(settings[name]?.[key] ?? min);
+    const slider = document.createElement('input'); slider.type = 'range';
+    Object.assign(slider, {min, max, step, value: settings[name]?.[key] ?? min});
+    slider.setAttribute('aria-label', `${name} ${key}`);
+    slider.addEventListener('input', () => { output.textContent = slider.value; });
+    slider.addEventListener('change', async () => {
+      try { await request('/api/config', {pedal: name, setting: key, value: Number(slider.value)}); }
+      catch (error) { status.textContent = error.message; }
+    });
+    label.append(output); row.append(label, slider); configFields.append(row);
+  }
+  config.showModal();
 }
 document.getElementById('config-close').addEventListener('click', () => config.close());
 amount.addEventListener('input', () => {
@@ -195,19 +340,32 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, self._state())
             except (OSError, ValueError) as error:
                 self._json(503, {"error": str(error)})
+        elif self.path == "/api/lv2":
+            try:
+                response = send_mode_command("lv2-list")
+                if response.startswith("error:"):
+                    raise ValueError(response[6:].strip())
+                self._json(200, json.loads(response))
+            except (OSError, ValueError) as error:
+                self._json(503, {"error": str(error)})
         else:
             self._json(404, {"error": "Not found"})
 
     def do_POST(self) -> None:
-        if self.path not in ("/api/mode", "/api/amount", "/api/type", "/api/board", "/api/slots", "/api/config"):
+        if self.path not in ("/api/mode", "/api/amount", "/api/type", "/api/board", "/api/slots", "/api/config", "/api/import"):
             self._json(404, {"error": "Not found"})
             return
         try:
             length = int(self.headers.get("Content-Length", "0"))
-            if not 0 < length <= 256:
+            if not 0 < length <= 4096:
                 raise ValueError("Invalid request size")
             payload = json.loads(self.rfile.read(length))
-            if self.path == "/api/mode":
+            if self.path == "/api/import":
+                uri = payload["uri"]
+                if not isinstance(uri, str) or not 0 < len(uri) <= 2048 or any(character.isspace() for character in uri):
+                    raise ValueError("a valid LV2 plugin URI is required")
+                command = f"lv2-load {uri}"
+            elif self.path == "/api/mode":
                 enabled = payload["enabled"]
                 if not isinstance(enabled, bool):
                     raise ValueError("enabled must be true or false")
@@ -219,22 +377,22 @@ class Handler(BaseHTTPRequestHandler):
                 command = f"amount {amount}"
             elif self.path == "/api/type":
                 command = payload["effect_type"]
-                if command not in ("overdrive", "fuzz"):
-                    raise ValueError("effect_type must be overdrive or fuzz")
+                if command not in self._state()["available"]:
+                    raise ValueError("effect_type must name a loaded pedal")
             elif self.path == "/api/slots":
                 slots = payload["slots"]
-                if not isinstance(slots, list) or len(slots) != 2 or any(pedal is not None and pedal not in ("overdrive", "fuzz") for pedal in slots) or len([pedal for pedal in slots if pedal is not None]) != len(set(pedal for pedal in slots if pedal is not None)):
+                if not isinstance(slots, list) or len(slots) != 2 or any(pedal is not None and pedal not in self._state()["available"] for pedal in slots) or len([pedal for pedal in slots if pedal is not None]) != len(set(pedal for pedal in slots if pedal is not None)):
                     raise ValueError("slots must contain two unique pedal names or null")
                 command = "slots " + ",".join(pedal or "-" for pedal in slots)
             elif self.path == "/api/config":
                 pedal, setting, value = payload["pedal"], payload["setting"], payload["value"]
-                if pedal not in ("overdrive", "fuzz") or setting not in ("drive", "tone", "mix", "level") or isinstance(value, bool) or not isinstance(value, (int, float)):
+                if pedal not in self._state()["available"] or setting not in self._state()["available"][pedal]["settings"] or isinstance(value, bool) or not isinstance(value, (int, float)):
                     raise ValueError("invalid pedal setting")
                 command = f"config {pedal} {setting} {value}"
             else:
                 pedals = payload["pedals"]
-                if not isinstance(pedals, list) or len(pedals) > 2 or len(set(pedals)) != len(pedals) or any(pedal not in ("overdrive", "fuzz") for pedal in pedals):
-                    raise ValueError("pedals must be a list of unique overdrive/fuzz names")
+                if not isinstance(pedals, list) or len(pedals) > 32 or len(set(pedals)) != len(pedals) or any(pedal not in self._state()["available"] for pedal in pedals):
+                    raise ValueError("pedals must be a list of unique loaded pedal names")
                 command = "board " + (",".join(pedals) or "-")
             response = send_mode_command(command)
             if response.startswith("error:"):

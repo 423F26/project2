@@ -37,15 +37,25 @@ uv run pedal mode effect
 uv run pedal mode toggle
 uv run pedal mode fuzz
 uv run pedal mode overdrive
+uv run pedal mode delay
+uv run pedal mode tremolo
+uv run pedal mode chorus
 uv run pedal mode board overdrive,fuzz
 uv run pedal mode board fuzz,overdrive
+uv run pedal mode board overdrive,fuzz,delay,tremolo,chorus
 uv run pedal mode board -
-uv run pedal mode slots -,fuzz
 uv run pedal mode config fuzz drive 25
 uv run pedal mode config overdrive tone 3500
+uv run pedal mode config delay time 450
+uv run pedal mode config tremolo rate 6
+uv run pedal mode config chorus depth 0.7
 ```
 
-`board` sets the serial order from input to output and fills slots from the left. `slots` sets exact left and right positions; `-` is an empty slot, so `slots -,fuzz` leaves Fuzz in the right slot. The `fuzz` and `overdrive` commands are shortcuts for a board with only that pedal. `config` changes a pedal’s own Drive, Tone, Mix (Overdrive only), or Level. Drive accepts 1–100, Tone accepts 100 Hz up to below half the audio sample rate, and Mix and Level accept 0–1. `effect` enables the board; `clean` bypasses it. Audible changes crossfade over 10 ms. The commands use `/run/guitar-effect.sock`. The account running the effect must be able to create this socket in `/run`, and the account running the control command must be able to access it. On systems where a regular account cannot write to `/run`, arrange suitable deployment permissions for that fixed path. Run one effect process at a time.
+`board` sets the ordered signal path from input to output. It grows or shrinks with the active pedals, up to 32; `board -` clears it. The older `slots` command remains available for scripts that use explicit empty positions. Each built-in pedal name is a shortcut for a board with only that pedal. `config` changes each pedal’s controls. Overdrive and Fuzz use Drive (1–100), Tone (100 Hz up to below half the sample rate), Level (0–1), and Overdrive Mix (0–1). Delay has Time (20–1500 ms), Feedback (0–0.9), and Mix (0–1). Tremolo has Rate (0.1–20 Hz) and Depth (0–1). Chorus has Rate (0.1–5 Hz), Depth (0–1), and Mix (0–1). `effect` enables the board; `clean` bypasses it. Audible changes crossfade over 10 ms. The commands use `/run/guitar-effect.sock`. The account running the effect must be able to create this socket in `/run`, and the account running the control command must be able to access it. On systems where a regular account cannot write to `/run`, arrange suitable deployment permissions for that fixed path. Run one effect process at a time.
+
+## LV2 effects
+
+To install an effect from the [LV2 plugin catalog](https://github.com/alex-tee/lv2-plugins-ultimate-list), find its URI, and load it into the pedal library, follow [Add LV2 plugins](lv2-plugins.md).
 
 ## Footswitch
 
@@ -65,11 +75,11 @@ On your computer, replace the host and path with the target Pi values:
 ssh -L 8765:127.0.0.1:8765 pi-host 'cd /path/to/project2 && uv run pedal demo-ui'
 ```
 
-Keep the SSH terminal open and visit `http://127.0.0.1:8765`. The page adds or removes fuzz and overdrive, reverses their slot positions, opens each pedal’s cog settings, bypasses the board, and adjusts the global mix. It binds only to `127.0.0.1` on the Pi. When the UI starts the effect, it captures from the first available input and plays through ALSA's system default output. Set the Pi's system default to its built-in audio output to hear the demo there instead of through the iRig, or use `demo-ui --output <ALSA-device>` to select a specific output. An already-running effect keeps its current output; stop it first or launch `pedal effect` with explicit `--input` and `--output` options. The UI stops only an effect process it started. `demo-ui --port <port>` changes the server port; update the SSH forward to match.
+Keep the SSH terminal open and visit `http://127.0.0.1:8765`. The page shows an active board and searchable pedal library. Use **Import effect** to load compatible installed LV2 plugins, then add or remove pedals, move them left or right, open each pedal’s cog settings, bypasses the board, and adjusts the global mix. It binds only to `127.0.0.1` on the Pi. When the UI starts the effect, it captures from the first available input and plays through ALSA's system default output. Set the Pi's system default to its built-in audio output to hear the demo there instead of through the iRig, or use `demo-ui --output <ALSA-device>` to select a specific output. An already-running effect keeps its current output; stop it first or launch `pedal effect` with explicit `--input` and `--output` options. The UI stops only an effect process it started. `demo-ui --port <port>` changes the server port; update the SSH forward to match.
 
 ## LVGL pedal board preview
 
-The [LVGL desktop preview](../../lvgl_ui/README.md) lets you drag Fuzz and Overdrive between a rack and either board slot. You can leave the left slot empty. Tap a pedal’s cog for its own settings. In demo mode, no audio device is needed; use `./build/lvgl/pedal-lvgl --live` on the same machine as the running effect to control audio.
+The [LVGL desktop preview](../../lvgl_ui/README.md) has a library menu for the five built-in pedals. The active board expands as you add them. Drag pedals across the board to reorder or down to remove them. Tap a pedal’s cog for its settings. In demo mode, no audio device is needed; use `./build/lvgl/pedal-lvgl --live` on the same machine as the running effect to control audio.
 
 ## Troubleshooting
 

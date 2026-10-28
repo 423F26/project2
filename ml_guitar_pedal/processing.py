@@ -1,4 +1,4 @@
-"""Guitar overdrive, fuzz, and click-free effect switching."""
+"""Built-in guitar pedals and click-free effect switching."""
 
 from __future__ import annotations
 
@@ -89,21 +89,124 @@ class Fuzz:
         return _pcm16(filtered * self.level * 32767.0)
 
 
+class Delay:
+    """Feedback delay with a fixed maximum buffer."""
+
+    def __init__(self, sample_rate: int):
+        self.sample_rate = sample_rate
+        self.time = 300.0
+        self.feedback = 0.35
+        self.mix = 0.35
+        self.buffer = np.zeros(sample_rate * 2, dtype=np.float32)
+        self.position = 0
+
+    def set_parameter(self, name: str, value: float) -> None:
+        if not math.isfinite(value):
+            raise ValueError("pedal setting must be finite")
+        if name == "time" and 20 <= value <= 1500:
+            self.time = value
+        elif name == "feedback" and 0 <= value <= 0.9:
+            self.feedback = value
+        elif name == "mix" and 0 <= value <= 1:
+            self.mix = value
+        else:
+            raise ValueError("invalid delay setting or value")
+
+    def process(self, samples: np.ndarray) -> np.ndarray:
+        output = np.empty(len(samples), dtype=np.float32)
+        delay = max(1, round(self.time * self.sample_rate / 1000))
+        size = len(self.buffer)
+        for index, sample in enumerate(samples):
+            dry = float(sample) / 32768.0
+            wet = float(self.buffer[(self.position - delay) % size])
+            output[index] = dry * (1 - self.mix) + wet * self.mix
+            self.buffer[self.position] = dry + wet * self.feedback
+            self.position = (self.position + 1) % size
+        return _pcm16(output * 32767)
+
+
+class Tremolo:
+    def __init__(self, sample_rate: int):
+        self.sample_rate = sample_rate
+        self.rate = 5.0
+        self.depth = 0.7
+        self.phase = 0.0
+
+    def set_parameter(self, name: str, value: float) -> None:
+        if not math.isfinite(value):
+            raise ValueError("pedal setting must be finite")
+        if name == "rate" and 0.1 <= value <= 20:
+            self.rate = value
+        elif name == "depth" and 0 <= value <= 1:
+            self.depth = value
+        else:
+            raise ValueError("invalid tremolo setting or value")
+
+    def process(self, samples: np.ndarray) -> np.ndarray:
+        phases = self.phase + np.arange(len(samples), dtype=np.float64) * self.rate / self.sample_rate
+        gain = 1 - self.depth * (1 - np.sin(2 * np.pi * phases)) / 2
+        self.phase = (self.phase + len(samples) * self.rate / self.sample_rate) % 1
+        return _pcm16(samples.astype(np.float32) * gain)
+
+
+class Chorus:
+    """Short modulated delay mixed with the dry signal."""
+
+    def __init__(self, sample_rate: int):
+        self.sample_rate = sample_rate
+        self.rate = 1.2
+        self.depth = 0.5
+        self.mix = 0.5
+        self.phase = 0.0
+        self.buffer = np.zeros(max(1, round(sample_rate * 0.06)), dtype=np.float32)
+        self.position = 0
+
+    def set_parameter(self, name: str, value: float) -> None:
+        if not math.isfinite(value):
+            raise ValueError("pedal setting must be finite")
+        if name == "rate" and 0.1 <= value <= 5:
+            self.rate = value
+        elif name == "depth" and 0 <= value <= 1:
+            self.depth = value
+        elif name == "mix" and 0 <= value <= 1:
+            self.mix = value
+        else:
+            raise ValueError("invalid chorus setting or value")
+
+    def process(self, samples: np.ndarray) -> np.ndarray:
+        output = np.empty(len(samples), dtype=np.float32)
+        size = len(self.buffer)
+        for index, sample in enumerate(samples):
+            dry = float(sample) / 32768.0
+            delay = (12 + 8 * self.depth * math.sin(2 * math.pi * self.phase)) * self.sample_rate / 1000
+            offset = self.position - delay
+            low = math.floor(offset)
+            fraction = offset - low
+            wet = self.buffer[low % size] * (1 - fraction) + self.buffer[(low + 1) % size] * fraction
+            output[index] = dry * (1 - self.mix) + wet * self.mix
+            self.buffer[self.position] = dry
+            self.position = (self.position + 1) % size
+            self.phase = (self.phase + self.rate / self.sample_rate) % 1
+        return _pcm16(output * 32767)
+
+
+BUILTIN_PEDALS = ("overdrive", "fuzz", "delay", "tremolo", "chorus")
+
+
 @dataclass(frozen=True)
 class PedalGraph:
-    """Two physical slots and their directed input-to-output signal path."""
+    """Ordered active pedals and their directed input-to-output signal path."""
 
-    slots: tuple[str | None, ...] = ("overdrive", None)
+    slots: tuple[str | None, ...] = ("overdrive",)
 
     def __post_init__(self) -> None:
-        if len(self.slots) > 2:
-            raise ValueError("the board has two slots")
-        object.__setattr__(self, "slots", (*self.slots, *(None for _ in range(2 - len(self.slots)))))
+        if len(self.slots) > 32:
+            raise ValueError("the board supports at most 32 pedals")
         pedals = self.pedals
         if len(set(pedals)) != len(pedals):
             raise ValueError("a pedal may appear on the board only once")
-        if any(pedal not in ("overdrive", "fuzz") for pedal in pedals):
-            raise ValueError("board pedals must be overdrive or fuzz")
+        if any(pedal not in BUILTIN_PEDALS and not pedal.startswith("lv2-") for pedal in pedals):
+            raise ValueError("unknown board pedal")
 
     @property
     def pedals(self) -> tuple[str, ...]:
@@ -121,10 +224,14 @@ class PedalGraph:
 class SwitchableEffect:
     """Process a serial pedal graph with click-free board and bypass changes."""
 
-    def __init__(self, overdrive: Overdrive, sample_rate: int, clean_level: float, fuzz: Fuzz | None = None):
+    def __init__(self, overdrive: Overdrive, sample_rate: int, clean_level: float, fuzz: Fuzz | None = None,
+                 lv2_processors: dict | None = None):
+        self.sample_rate = sample_rate
         self.overdrive = overdrive
         self.fuzz = fuzz or Fuzz(sample_rate)
-        self._processors = {"overdrive": self.overdrive, "fuzz": self.fuzz}
+        self._processors = {"overdrive": self.overdrive, "fuzz": self.fuzz,
+                            "delay": Delay(sample_rate), "tremolo": Tremolo(sample_rate),
+                            "chorus": Chorus(sample_rate), **(lv2_processors or {})}
         self.graph = PedalGraph()
         self._previous_graph: PedalGraph | None = None
         self._previous_processors: dict | None = None
@@ -135,6 +242,17 @@ class SwitchableEffect:
         self.wet = 1.0
         self.target = 1.0
         self.fade_samples = max(1, sample_rate // 100)  # 10 ms
+
+    def add_lv2_processor(self, processor) -> str:
+        for key, existing in self._processors.items():
+            if key.startswith("lv2-") and existing.uri == processor.uri:
+                return key
+        index = 1
+        while f"lv2-{index}" in self._processors:
+            index += 1
+        key = f"lv2-{index}"
+        self._processors[key] = processor
+        return key
 
     @property
     def mode(self) -> str:
@@ -157,12 +275,12 @@ class SwitchableEffect:
     def set_board(self, pedals: tuple[str, ...] | list[str]) -> None:
         self._set_graph(PedalGraph(tuple(pedals)))
 
-    def set_slots(self, slots: tuple[str | None, str | None] | list[str | None]) -> None:
-        if len(slots) != 2:
-            raise ValueError("board requires exactly two slots")
+    def set_slots(self, slots: tuple[str | None, ...] | list[str | None]) -> None:
         self._set_graph(PedalGraph(tuple(slots)))
 
     def _set_graph(self, graph: PedalGraph) -> None:
+        if any(pedal not in self._processors for pedal in graph.pedals):
+            raise ValueError("pedal is not loaded")
         if graph == self.graph:
             return
         if graph.pedals == self.graph.pedals:
@@ -194,12 +312,24 @@ class SwitchableEffect:
 
     @property
     def settings(self) -> dict[str, dict[str, float]]:
-        return {
-            "overdrive": {"drive": self.overdrive.drive, "tone": self.overdrive.tone,
-                          "mix": self.overdrive.mix, "level": self.overdrive.level},
-            "fuzz": {"drive": self.fuzz.drive, "tone": self.fuzz.tone,
-                     "level": self.fuzz.level},
-        }
+        names = {"overdrive": ("drive", "tone", "mix", "level"),
+                 "fuzz": ("drive", "tone", "level"),
+                 "delay": ("time", "feedback", "mix"),
+                 "tremolo": ("rate", "depth"),
+                 "chorus": ("rate", "depth", "mix")}
+        return {key: ({name: getattr(processor, name) for name in names[key]}
+                      if key in names else processor.settings)
+                for key, processor in self._processors.items()}
+
+    @property
+    def available_pedals(self) -> dict[str, dict]:
+        return {name: {"name": getattr(processor, "display_name", name.title()),
+                       "settings": self.settings[name],
+                       "uri": getattr(processor, "uri", None),
+                       "ranges": ({symbol: {"min": limits[2], "max": limits[3]}
+                                   for symbol, limits in processor.controls.items()}
+                                  if name.startswith("lv2-") else {})}
+                for name, processor in self._processors.items()}
 
     def set_mode(self, command: str) -> str:
         if command == "toggle":

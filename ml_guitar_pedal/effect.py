@@ -38,10 +38,12 @@ class AudioMeter:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Live guitar overdrive and fuzz through ALSA audio devices.")
+    parser = argparse.ArgumentParser(description="Live guitar pedal board through ALSA audio devices.")
     parser.add_argument("--input", help="ALSA capture device, e.g. plughw:1,0")
     parser.add_argument("--output", help="ALSA playback device, e.g. plughw:1,0")
     parser.add_argument("--list-devices", action="store_true", help="Show ALSA capture and playback devices")
+    parser.add_argument("--list-lv2", action="store_true", help="List installed compatible mono LV2 effects")
+    parser.add_argument("--lv2", action="append", default=[], metavar="URI", help="Load an installed LV2 effect into the rack (repeatable)")
     parser.add_argument("--rate", type=int, default=48_000)
     parser.add_argument("--block", type=int, default=128)
     parser.add_argument("--drive", type=float, default=20.0, help="Overdrive gain (at least 1)")
@@ -59,6 +61,15 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.list_lv2:
+        from ml_guitar_pedal.lv2_host import LV2World
+        world = LV2World()
+        try:
+            for uri, name in world.available():
+                print(f"{name}\t{uri}")
+        finally:
+            world.close()
+        return
     inputs, outputs = available_devices()
     if args.list_devices:
         print("capture:", ", ".join(inputs) or "none")
@@ -80,19 +91,32 @@ def main(argv: list[str] | None = None) -> None:
 
     input_device = args.input or inputs[0]
     output_device = args.output or (input_device if input_device in outputs else outputs[0])
+    world = None
+    lv2_processors = {}
+    if args.lv2:
+        from ml_guitar_pedal.lv2_host import LV2Processor, LV2World
+        world = LV2World()
+        try:
+            for index, uri in enumerate(dict.fromkeys(args.lv2), 1):
+                lv2_processors[f"lv2-{index}"] = LV2Processor(world, uri, args.rate)
+        except (ValueError, RuntimeError) as error:
+            lv2_processors.clear()
+            world.close()
+            parser.error(str(error))
     effect = SwitchableEffect(
         Overdrive(args.rate, args.drive, args.tone, args.mix, args.level),
         args.rate,
         args.clean_level,
-        Fuzz(args.rate, args.fuzz_drive, args.fuzz_tone, args.fuzz_level),
+        Fuzz(args.rate, args.fuzz_drive, args.fuzz_tone, args.fuzz_level), lv2_processors,
     )
     meter = AudioMeter(args.rate) if args.meter else None
 
+    controller = None
     try:
         with (
             AlsaPcm(input_device, AlsaPcm.CAPTURE, args.rate, args.block) as capture,
             AlsaPcm(output_device, AlsaPcm.PLAYBACK, args.rate, args.block) as playback,
-            ModeServer(effect) as controller,
+            ModeServer(effect, lv2_world=world) as controller,
         ):
             print(f"guitar effect: {input_device} -> {output_device}; mode=effect; Ctrl+C to stop", flush=True)
             while True:
@@ -104,6 +128,15 @@ def main(argv: list[str] | None = None) -> None:
                     playback.write(effect.process(samples))
     except KeyboardInterrupt:
         pass
+    finally:
+        active_world = controller.lv2_world if controller is not None else world
+        if active_world is not None:
+            # Release plugin instances before the metadata world.
+            effect._previous_processors = None
+            effect._processors.clear()
+            lv2_processors.clear()
+            del effect
+            active_world.close()
 
 
 if __name__ == "__main__":

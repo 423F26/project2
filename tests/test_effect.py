@@ -2,13 +2,18 @@ import socket
 import tempfile
 import unittest
 import json
+import threading
+from http.server import ThreadingHTTPServer
 from pathlib import Path
+from urllib.request import Request, urlopen
+from unittest.mock import patch
 
 import numpy as np
 
 from ml_guitar_pedal.control import ModeServer
+from ml_guitar_pedal.demo_ui import Handler
 from ml_guitar_pedal.effect import build_parser
-from ml_guitar_pedal.processing import Fuzz, Overdrive, PedalGraph, SwitchableEffect
+from ml_guitar_pedal.processing import Chorus, Delay, Fuzz, Overdrive, PedalGraph, SwitchableEffect, Tremolo
 
 
 class OverdriveTests(unittest.TestCase):
@@ -149,6 +154,12 @@ class OverdriveTests(unittest.TestCase):
                     self.assertEqual(state["graph"]["edges"], [["input", "fuzz"], ["fuzz", "overdrive"], ["overdrive", "output"]])
                 with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
                     client.connect(str(path))
+                    client.sendall(b"board overdrive,fuzz,delay,tremolo,chorus")
+                    server.poll()
+                    state = json.loads(client.recv(4096))
+                    self.assertEqual(state["pedals"], ["overdrive", "fuzz", "delay", "tremolo", "chorus"])
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+                    client.connect(str(path))
                     client.sendall(b"slots -,fuzz")
                     server.poll()
                     state = json.loads(client.recv(2048))
@@ -171,6 +182,124 @@ class OverdriveTests(unittest.TestCase):
         options = build_parser().parse_args([])
         self.assertEqual((options.rate, options.block, options.drive), (48_000, 128, 20.0))
         self.assertEqual((options.fuzz_drive, options.fuzz_tone, options.fuzz_level), (15.0, 2_500.0, 0.45))
+
+    def test_running_pedal_can_import_installed_lv2_effect(self):
+        class InstalledWorld:
+            def available(self):
+                return [("urn:test:echo", "Test Echo")]
+
+        class InstalledEffect:
+            def __init__(self, world, uri, sample_rate):
+                self.uri = uri
+                self.display_name = "Test Echo"
+                self.controls = {"gain": (0, 0.5, 0.0, 1.0)}
+                self.settings = {"gain": 0.5}
+
+            def process(self, samples):
+                return samples
+
+            def set_parameter(self, name, value):
+                self.settings[name] = value
+
+        effect = SwitchableEffect(Overdrive(48_000, 20, 3_000, 1, .5), 48_000, 1)
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "ml_guitar_pedal.lv2_host.LV2Processor", InstalledEffect
+        ):
+            with ModeServer(effect, Path(directory) / "pedal.sock", lv2_world=InstalledWorld()) as server:
+                def send(command):
+                    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+                        client.connect(str(server.path))
+                        client.sendall(command.encode())
+                        server.poll()
+                        return client.recv(8192).decode().strip()
+
+                listing = json.loads(send("lv2-list"))
+                self.assertEqual(listing["plugins"][0]["loaded_as"], None)
+                state = json.loads(send("lv2-load urn:test:echo"))
+                self.assertEqual(state["available"]["lv2-1"]["name"], "Test Echo")
+                self.assertEqual(state["available"]["lv2-1"]["uri"], "urn:test:echo")
+                self.assertEqual(json.loads(send("lv2-list"))["plugins"][0]["loaded_as"], "lv2-1")
+                self.assertEqual(len([key for key in json.loads(send("lv2-load urn:test:echo"))["available"] if key.startswith("lv2-")]), 1)
+                state = json.loads(send("board lv2-1,delay"))
+                self.assertEqual(state["pedals"], ["lv2-1", "delay"])
+
+    def test_browser_can_list_and_import_installed_lv2_effect(self):
+        commands = []
+
+        def respond(command):
+            commands.append(command)
+            if command == "lv2-list":
+                return json.dumps({"plugins": [{"uri": "urn:test:echo", "name": "Test Echo", "loaded_as": None}]})
+            if command == "lv2-load urn:test:echo":
+                return json.dumps({"available": {"lv2-1": {"name": "Test Echo"}}})
+            if command == "state":
+                return json.dumps({"available": {"lv2-1": {"name": "Test Echo"}}, "pedals": []})
+            raise AssertionError(command)
+
+        with patch("ml_guitar_pedal.demo_ui.send_mode_command", side_effect=respond):
+            server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                base = f"http://127.0.0.1:{server.server_port}"
+                with urlopen(base + "/api/lv2") as response:
+                    listing = json.load(response)
+                self.assertEqual(listing["plugins"][0]["name"], "Test Echo")
+                request = Request(base + "/api/import", json.dumps({"uri": "urn:test:echo"}).encode(),
+                                  {"Content-Type": "application/json"}, method="POST")
+                with urlopen(request) as response:
+                    state = json.load(response)
+                self.assertIn("lv2-1", state["available"])
+                self.assertEqual(commands, ["lv2-list", "lv2-load urn:test:echo", "state"])
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join()
+
+    def test_new_pedals_process_audio_and_validate_settings(self):
+        signal = np.full(1024, 4000, dtype="<i2")
+        for pedal, setting, value in ((Delay(48_000), "time", 20),
+                                      (Tremolo(48_000), "rate", 8),
+                                      (Chorus(48_000), "depth", 0.8)):
+            pedal.set_parameter(setting, value)
+            result = pedal.process(signal)
+            self.assertEqual(result.shape, signal.shape)
+            self.assertEqual(result.dtype, signal.dtype)
+            with self.assertRaises(ValueError):
+                pedal.set_parameter(setting, float("nan"))
+        delay = Delay(48_000)
+        delay.set_parameter("time", 20)
+        delay.set_parameter("mix", 1)
+        impulse = np.zeros(1100, dtype="<i2")
+        impulse[0] = 10000
+        result = delay.process(impulse)
+        self.assertGreater(int(result[960]), 9000)
+        self.assertEqual(int(result[0]), 0)
+
+    def test_new_pedals_can_be_selected_and_configured(self):
+        effect = SwitchableEffect(Overdrive(48_000, 20, 3000, 1, .5), 48_000, 1)
+        for name in ("delay", "tremolo", "chorus"):
+            effect.set_board((name,))
+            self.assertEqual(effect.graph.pedals, (name,))
+            self.assertIn(name, effect.available_pedals)
+        effect.set_pedal_config("delay", "feedback", .6)
+        self.assertEqual(effect.settings["delay"]["feedback"], .6)
+        with self.assertRaises(ValueError):
+            effect.set_pedal_config("delay", "feedback", 1)
+
+    def test_board_grows_and_preserves_order(self):
+        effect = SwitchableEffect(Overdrive(48_000, 20, 3000, 1, .5), 48_000, 1)
+        chain = ("overdrive", "fuzz", "delay", "tremolo", "chorus")
+        effect.set_board(chain)
+        self.assertEqual(effect.graph.pedals, chain)
+        self.assertEqual(effect.graph.slots, chain)
+        self.assertEqual(len(effect.graph.edges), 6)
+        signal = np.full(512, 1500, dtype="<i2")
+        self.assertEqual(effect.process(signal).shape, signal.shape)
+        effect.set_board(("chorus", "delay", "fuzz"))
+        self.assertEqual(effect.graph.pedals, ("chorus", "delay", "fuzz"))
+        with self.assertRaises(ValueError):
+            PedalGraph(("fuzz",) * 33)
 
 
 if __name__ == "__main__":

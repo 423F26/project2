@@ -11,6 +11,7 @@ nav:
       - Overview: docs/user/README.md
       - Getting started: docs/user/getting-started.md
       - Live effect: docs/user/live-effect.md
+      - Add LV2 plugins: docs/user/lv2-plugins.md
       - Pitch classifier: docs/user/pitch-classifier.md
       - Audio-to-MIDI: docs/user/audio-to-midi.md
   - Developer guides:
