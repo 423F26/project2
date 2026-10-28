@@ -49,7 +49,6 @@ typedef struct {
     Pedal pedals[MAX_PEDALS];
     size_t pedal_count;
     size_t active[MAX_ACTIVE], active_count;
-    size_t slots[MAX_ACTIVE], slot_count;
     Pedal previous[MAX_ACTIVE];
     size_t previous_count;
     bool transition;

@@ -126,39 +126,10 @@ static json_object *state(Engine *engine)
     json_object *root = json_object_new_object();
     json_object_object_add(root, "enabled", json_object_new_boolean(engine->enabled));
     json_object_object_add(root, "amount", json_object_new_double(engine->amount));
-    json_object_object_add(root, "mode", json_object_new_string(engine->enabled ? "effect" : "clean"));
-    const char *effect_type = engine->active_count ? engine->pedals[engine->active[engine->active_count - 1]].id : "overdrive";
-    json_object_object_add(root, "effect_type", json_object_new_string(effect_type));
     json_object *pedals = json_object_new_array();
-    json_object *slots = json_object_new_array();
-    json_object *nodes = json_object_new_array();
-    json_object *edges = json_object_new_array();
-    json_object_array_add(nodes, json_object_new_string("input"));
-    const char *previous = "input";
-    for(size_t i = 0; i < engine->active_count; ++i) {
-        const char *id = engine->pedals[engine->active[i]].id;
-        json_object_array_add(pedals, json_object_new_string(id));
-        json_object_array_add(nodes, json_object_new_string(id));
-        json_object *edge = json_object_new_array();
-        json_object_array_add(edge, json_object_new_string(previous));
-        json_object_array_add(edge, json_object_new_string(id));
-        json_object_array_add(edges, edge);
-        previous = id;
-    }
-    json_object_array_add(nodes, json_object_new_string("output"));
-    json_object *edge = json_object_new_array();
-    json_object_array_add(edge, json_object_new_string(previous));
-    json_object_array_add(edge, json_object_new_string("output"));
-    json_object_array_add(edges, edge);
-    for(size_t i = 0; i < engine->slot_count; ++i)
-        json_object_array_add(slots, engine->slots[i] == SIZE_MAX ? NULL :
-                              json_object_new_string(engine->pedals[engine->slots[i]].id));
+    for(size_t i = 0; i < engine->active_count; ++i)
+        json_object_array_add(pedals, json_object_new_string(engine->pedals[engine->active[i]].id));
     json_object_object_add(root, "pedals", pedals);
-    json_object_object_add(root, "slots", slots);
-    json_object *graph = json_object_new_object();
-    json_object_object_add(graph, "nodes", nodes);
-    json_object_object_add(graph, "edges", edges);
-    json_object_object_add(root, "graph", graph);
     json_object *all_settings = json_object_new_object();
     json_object *available = json_object_new_object();
     for(size_t i = 0; i < engine->pedal_count; ++i) {
@@ -211,10 +182,10 @@ static json_object *lv2_listing(Engine *engine)
     return root;
 }
 
-static bool parse_board(Engine *engine, const char *text, size_t *indices, size_t *count, bool slots)
+static bool parse_board(Engine *engine, const char *text, size_t *indices, size_t *count)
 {
     *count = 0;
-    if(!slots && strcmp(text, "-") == 0) return true;
+    if(strcmp(text, "-") == 0) return true;
     char copy[4096];
     size_t length = strlen(text);
     if(!length || length >= sizeof(copy) || text[0] == ',' || text[length - 1] == ',' || strstr(text, ",,")) return false;
@@ -222,17 +193,14 @@ static bool parse_board(Engine *engine, const char *text, size_t *indices, size_
     char *save = NULL;
     for(char *part = strtok_r(copy, ",", &save); part; part = strtok_r(NULL, ",", &save)) {
         if(*count == MAX_ACTIVE) return false;
-        if(slots && strcmp(part, "-") == 0) indices[(*count)++] = SIZE_MAX;
-        else {
+        {
             Pedal *pedal = engine_find(engine, part);
             if(!pedal) return false;
             indices[(*count)++] = (size_t)(pedal - engine->pedals);
         }
     }
-    if(slots && *count != 2) return false;
     for(size_t i = 0; i < *count; ++i)
-        if(indices[i] != SIZE_MAX)
-            for(size_t j = 0; j < i; ++j) if(indices[i] == indices[j]) return false;
+        for(size_t j = 0; j < i; ++j) if(indices[i] == indices[j]) return false;
     return true;
 }
 
@@ -260,21 +228,13 @@ static char *reply_command(Engine *engine, const char *command)
             engine->target = engine->enabled ? value : 0;
             result = state(engine);
         } else snprintf(error, sizeof(error), "amount must be between 0 and 1");
-    } else if(strncmp(command, "board ", 6) == 0 || strncmp(command, "slots ", 6) == 0) {
-        bool is_slots = command[0] == 's';
+    } else if(strncmp(command, "board ", 6) == 0) {
         size_t indices[MAX_ACTIVE], count;
-        if(!parse_board(engine, command + 6, indices, &count, is_slots))
+        if(!parse_board(engine, command + 6, indices, &count))
             snprintf(error, sizeof(error), "invalid pedal board");
         else {
-            size_t active[MAX_ACTIVE], active_count = 0;
-            for(size_t i = 0; i < count; ++i) if(indices[i] != SIZE_MAX) active[active_count++] = indices[i];
-            if(engine_set_board(engine, active, active_count)) {
-                if(is_slots) {
-                    memcpy(engine->slots, indices, count * sizeof(size_t));
-                    engine->slot_count = count;
-                }
-                result = state(engine);
-            } else snprintf(error, sizeof(error), "could not set board");
+            if(engine_set_board(engine, indices, count)) result = state(engine);
+            else snprintf(error, sizeof(error), "could not set board");
         }
     } else if(strncmp(command, "config ", 7) == 0) {
         char id[32], setting[96], number[128], extra;
@@ -283,13 +243,6 @@ static char *reply_command(Engine *engine, const char *command)
            parse_number(number, &value) && engine_config(engine, engine_find(engine, id), setting, value))
             result = state(engine);
         else snprintf(error, sizeof(error), "invalid pedal setting");
-    } else {
-        Pedal *pedal = engine_find(engine, command);
-        if(pedal) {
-            size_t index = (size_t)(pedal - engine->pedals);
-            if(engine_set_board(engine, &index, 1)) result = state(engine);
-            else snprintf(error, sizeof(error), "could not select pedal");
-        }
     }
     if(result) {
         const char *serialized = json_object_to_json_string_ext(result, JSON_C_TO_STRING_PLAIN);

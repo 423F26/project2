@@ -16,7 +16,7 @@ The default demo mode needs no guitar interface or audio process. Open **PEDAL L
 
 ## Connect to the running pedal
 
-On the same machine as `pedal effect`, start the UI with:
+On the same machine as `pedal-engine`, start the UI with:
 
 ```bash
 ./build/lvgl/pedal-lvgl --live
@@ -24,4 +24,4 @@ On the same machine as `pedal effect`, start the UI with:
 
 It reads and changes the existing `/run/guitar-effect.sock` control interface. The UI shows **PEDAL DISCONNECTED** if the effect process is unavailable. The audio backend follows the active chain from left to right and crossfades when its order or a pedal setting changes.
 
-Loaded LV2 effects are available through the browser UI and CLI; the native preview shows built-in pedals. The current graph is a serial path: input → active pedals → output. The native view displays up to five built-in pedals; use the browser UI for chains containing LV2 effects or more pedals. The graph state includes nodes and directed edges so later versions can expand to branching and routing. This desktop SDL2 build is a preview; Pi touchscreen deployment needs a display and input backend matched to the actual screen hardware.
+Loaded LV2 effects are available through the browser UI and CLI; the native preview shows built-in pedals. The current graph is a serial path: input → active pedals → output. The native view displays up to five built-in pedals; use the browser UI for chains containing LV2 effects or more pedals. This desktop SDL2 build is a preview; Pi touchscreen deployment needs a display and input backend matched to the actual screen hardware.

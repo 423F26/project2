@@ -67,8 +67,6 @@ bool engine_init(Engine *engine, int rate, size_t block, double clean_level)
     }
     engine->active[0] = 0;
     engine->active_count = 1;
-    engine->slots[0] = 0;
-    engine->slot_count = 1;
     return true;
 }
 
@@ -142,15 +140,11 @@ bool engine_set_board(Engine *engine, const size_t *indices, size_t count)
     }
     if(count == engine->active_count &&
        (count == 0 || memcmp(indices, engine->active, count * sizeof(*indices)) == 0)) {
-        if(count) memcpy(engine->slots, indices, count * sizeof(*indices));
-        engine->slot_count = count;
         return true;
     }
     if(!snapshot(engine)) return false;
     if(count) memcpy(engine->active, indices, count * sizeof(*indices));
     engine->active_count = count;
-    if(count) memcpy(engine->slots, indices, count * sizeof(*indices));
-    engine->slot_count = count;
     return true;
 }
 
