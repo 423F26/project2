@@ -71,6 +71,13 @@ static char *command_for(const char *path, json_object *o) {
         json_object *value;
         if(!json_object_object_get_ex(o, "enabled", &value) || !json_object_is_type(value, json_type_boolean)) return NULL;
         strcpy(buffer, json_object_get_boolean(value) ? "tuner on" : "tuner off");
+    } else if(strcmp(path, "/api/bypass") == 0) {
+        const char *pedal = field_string(o, "pedal");
+        json_object *value;
+        if(!token(pedal) || !json_object_object_get_ex(o, "bypassed", &value) ||
+           !json_object_is_type(value, json_type_boolean)) return NULL;
+        snprintf(buffer, sizeof(buffer), "bypass %s %s", pedal,
+                 json_object_get_boolean(value) ? "on" : "off");
     } else if(strcmp(path, "/api/config") == 0) {
         const char *pedal = field_string(o, "pedal"), *setting = field_string(o, "setting");
         double value;

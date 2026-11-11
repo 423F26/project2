@@ -7,16 +7,14 @@
 <style>
   :root { color-scheme: dark; font-family: system-ui, sans-serif; }
   body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #11171c; color: #eef5f3; }
-  main { box-sizing: border-box; width: min(1200px, calc(100% - 32px)); padding: 20px 24px; border: 1px solid #34444b; border-radius: 20px; background: #1d282e; box-shadow: 0 20px 60px #0005; display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 320px); grid-template-areas: "title toggle" "subtitle toggle" "path path" "board-title board-title" "board board" "library amount-label" "library amount" "library status" "library tuner"; column-gap: 24px; align-items: start; }
+  main { box-sizing: border-box; width: min(1200px, calc(100% - 32px)); padding: 20px 24px; border: 1px solid #34444b; border-radius: 20px; background: #1d282e; box-shadow: 0 20px 60px #0005; display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 320px); grid-template-areas: "title toggle" "subtitle toggle" "path path" "board board" "mix tuner" "status status"; column-gap: 24px; align-items: start; }
   h1 { grid-area: title; }
   main > p:first-of-type { grid-area: subtitle; }
   #toggle { grid-area: toggle; }
   #path { grid-area: path; }
-  main > h2 { grid-area: board-title; margin: 0; font-size: 1.12rem; }
-  #board { grid-area: board; }
-  #library-panel { grid-area: library; }
-  main > .row { grid-area: amount-label; }
-  #amount { grid-area: amount; }
+  .board-panel { grid-area: board; min-width: 0; }
+  .board-heading h2 { font-size: 1.12rem; }
+  .mix-control { grid-area: mix; min-width: 0; }
   #status { grid-area: status; }
   #tuner-panel { grid-area: tuner; }
   h1 { margin: 0 0 6px; font-size: 1.65rem; }
@@ -27,8 +25,16 @@
   .board-card { --pedal-accent: #76d6bc; flex: 0 0 150px; min-height: 112px; padding: 12px; position: relative; overflow: hidden; border: 1px solid color-mix(in srgb, var(--pedal-accent) 55%, #24333a); border-radius: 15px; background: linear-gradient(155deg, color-mix(in srgb, var(--pedal-accent) 22%, #25343d), #17242d 78%); box-shadow: inset 0 2px 0 #ffffff20, inset 0 -5px 12px #0005, 0 6px 0 #0b141a, 0 9px 16px #0005; }
   .board-card::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 5px; background: var(--pedal-accent); box-shadow: 0 0 15px var(--pedal-accent); }
   .pedal-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-left: 6px; }
-  .pedal-kind { color: var(--pedal-accent); font-size: .63rem; letter-spacing: .18em; font-weight: 800; text-transform: uppercase; }
-  .pedal-led { flex: 0 0 10px; width: 10px; height: 10px; border: 2px solid #eafff5a8; border-radius: 50%; background: var(--pedal-accent); box-shadow: 0 0 10px var(--pedal-accent), 0 0 18px var(--pedal-accent); }
+  .pedal-kind { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--pedal-accent); font-size: .63rem; letter-spacing: .18em; font-weight: 800; text-transform: uppercase; }
+  button.pedal-led { flex: 0 0 44px; position: relative; width: 44px; min-height: 44px; height: 44px; padding: 0; margin: -12px -10px -12px 0; border: 0; border-radius: 9px; background: transparent; box-shadow: none; }
+  button.pedal-led::before { content: ''; position: absolute; width: 10px; height: 10px; left: 16px; top: 16px; border: 1px solid #eafff580; border-radius: 50%; background: var(--pedal-accent); box-shadow: 0 0 5px var(--pedal-accent); }
+  button.pedal-led[aria-pressed=false]::before { border-color: #6f8082; background: #3c4a4e; box-shadow: none; }
+  .board-card { touch-action: none; user-select: none; cursor: grab; }
+  .board-card.bypassed { background: linear-gradient(155deg, #273138, #172029 78%); }
+  .board-card.bypassed strong, .board-card.bypassed .pedal-kind { opacity: .55; }
+  .board-card.is-dragging { opacity: .28; }
+  .board-card.drag-ghost { position: fixed; z-index: 2000; pointer-events: none; margin: 0; opacity: .95; transform: rotate(2deg); box-shadow: 0 14px 30px #0008; }
+  body.pedal-dragging, body.pedal-dragging * { cursor: grabbing !important; }
   .board-card strong { display: block; min-height: 40px; margin: 10px 0 4px 6px; font-size: 1.16rem; line-height: 1.1; overflow-wrap: anywhere; }
   .actions { display: flex; gap: 6px; }
   .actions button { min-height: 38px; border: 1px solid #ffffff19; border-radius: 9px; font-size: .95rem; background: #0b1821aa; color: #eef5f3; box-shadow: inset 0 1px 0 #ffffff1a; }
@@ -64,6 +70,15 @@
   #import-status { min-height: 1.3em; margin: 12px 0; color: #b8d7ce; }
   #import-close { background: #34444b; color: #eef5f3; }
   .path { margin: 10px 0 12px; font-weight: 600; color: #eef5f3; overflow-wrap: anywhere; }
+  .board-heading, .library-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .board-heading { margin-bottom: 12px; }
+  .board-heading h2, .library-heading h2 { margin: 0; }
+  #add-pedal, #library-close { width: auto; min-height: 44px; padding: 0 16px; border-radius: 10px; font-size: 1rem; }
+  #library-close { background: #34444b; color: #eef5f3; }
+  #library-dialog { box-sizing: border-box; width: min(680px, calc(100% - 32px)); max-height: calc(100dvh - 24px); overflow-y: auto; }
+  .library-toolbar { display: flex; align-items: center; gap: 12px; margin: 12px 0; }
+  .library-toolbar #search { flex: 1; min-width: 0; min-height: 44px; margin: 0; }
+  .library-toolbar .import-effect { flex-shrink: 0; min-height: 44px; margin: 0; }
   @media (prefers-reduced-motion: no-preference) { .library button, .actions button { transition: transform .15s, filter .15s, background .15s; } }
   button:focus-visible, input:focus-visible { outline: 3px solid #f5d562; outline-offset: 3px; }
   .row { display: flex; justify-content: space-between; align-items: center; margin: 10px 0 8px; font-weight: 600; }
@@ -91,10 +106,48 @@
   @media (max-width: 720px) {
     body { display: block; }
     main { width: 100%; min-height: 100vh; border-radius: 0; padding: 18px; display: block; }
-    main > h2 { margin-top: 4px; }
+    .board-panel { margin-top: 4px; }
     #toggle { margin: 4px 0; }
     .board { min-height: 130px; }
-    #library-panel { margin-top: 4px; }
+  }
+  @media (min-width: 640px) and (max-height: 600px) {
+    body { min-height: 100dvh; }
+    main { position: relative; width: calc(100% - 16px); height: calc(100dvh - 16px); padding: 12px; border-radius: 14px; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); grid-template-rows: 44px 20px minmax(0, 1fr) 58px 16px; grid-template-areas: "title toggle" "path path" "board board" "mix tuner" "status status"; gap: 8px 14px; }
+    main > h1 { grid-area: title; align-self: center; margin: 0; font-size: 1.35rem; }
+    main > p:not([id]) { display: none; }
+    #toggle { grid-area: toggle; min-height: 44px; font-size: 1.15rem; border-radius: 10px; }
+    #path { grid-area: path; margin: 0; font-size: .85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .board-panel { grid-area: board; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+    .board-heading { flex-shrink: 0; min-height: 44px; margin-bottom: 8px; }
+    .board-heading h2 { font-size: 1rem; }
+    #add-pedal { min-height: 44px; font-size: .95rem; }
+    .board { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(var(--pedal-columns, 5), minmax(0, 1fr)); grid-auto-rows: minmax(190px, 1fr); align-items: stretch; gap: 10px; overflow-x: hidden; overflow-y: auto; padding: 4px 3px 10px; }
+    .board > .empty { grid-column: 1 / -1; }
+    .board-card { box-sizing: border-box; min-width: 0; min-height: 190px; padding: 10px; }
+    .board-card strong { min-height: 34px; margin: 10px 0 8px 6px; font-size: 1rem; }
+    .actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
+    .actions button { min-width: 0; min-height: 44px; padding: 0; }
+    .library { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+    .library button { min-height: 60px; padding: 8px 10px; font-size: .95rem; }
+    button.more { min-height: 36px; margin-top: 6px; }
+    .mix-control { grid-area: mix; min-width: 0; }
+    .row { margin: 0 0 2px; font-size: .85rem; }
+    #amount { box-sizing: border-box; height: 36px; margin: 0; }
+    #status { grid-area: status; margin: 0; min-height: 0; font-size: .75rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tuner { grid-area: tuner; position: relative; align-self: center; min-width: 0; border-radius: 10px; }
+    .tuner-summary { box-sizing: border-box; min-height: 44px; padding: 8px 10px; gap: 8px; }
+    .tuner-title { font-size: .9rem; }
+    .tuner-summary-status { font-size: .75rem; }
+    .tuner[open] .tuner-body { position: absolute; z-index: 2; bottom: 100%; left: -1px; right: -1px; box-sizing: border-box; max-height: calc(100dvh - 100px); overflow-y: auto; padding: 8px 12px 14px; border: 1px solid #46616a; border-radius: 12px 12px 0 0; background: #17252d; box-shadow: 0 -10px 28px #0008; }
+    .tuner-controls { padding-top: 0; border-top: 0; }
+    .tuner-readout { gap: 8px; }
+    .tuner-readout strong { min-width: 70px; font-size: 2.6rem; }
+    .tuner-readout span { font-size: .8rem; }
+    dialog { box-sizing: border-box; max-height: calc(100dvh - 24px); overflow-y: auto; padding: 16px; }
+    dialog h2 { margin-bottom: 10px; font-size: 1.2rem; }
+    dialog .setting { margin: 8px 0; }
+    dialog .setting input[type=range] { min-height: 30px; margin: 0; }
+    #import-dialog { max-height: calc(100dvh - 24px); }
   }
 </style>
 </head>
@@ -104,16 +157,17 @@
   <p>Build the signal path from input to output</p>
   <button id="toggle" type="button" aria-pressed="true">Signal ON</button>
   <p id="path" class="path">INPUT → OVERDRIVE → OUTPUT</p>
-  <h2>Active board</h2>
-  <div id="board" class="board"></div>
-  <details id="library-panel" open><summary>Pedal library</summary>
-    <button id="import-effect" class="import-effect" type="button">＋ Import effect</button>
-    <input id="search" type="search" placeholder="Search pedals" aria-label="Search pedal library">
-    <div id="pedal-library" class="library"></div>
-    <button id="show-more" class="more" type="button" hidden>Show all pedals</button>
-  </details>
-  <div class="row"><label for="amount">Effect amount</label><output id="value">100%</output></div>
-  <input id="amount" type="range" min="0" max="100" value="100" aria-label="Effect amount">
+  <section class="board-panel">
+    <div class="board-heading">
+      <h2>Active board</h2>
+      <button id="add-pedal" type="button" aria-haspopup="dialog" aria-controls="library-dialog">+ Add pedal</button>
+    </div>
+    <div id="board" class="board"></div>
+  </section>
+  <div class="mix-control">
+    <div class="row"><label for="amount">Effect amount</label><output id="value">100%</output></div>
+    <input id="amount" type="range" min="0" max="100" value="100" aria-label="Effect amount">
+  </div>
   <p id="status" class="hint" role="status">Connecting…</p>
   <details class="tuner" id="tuner-panel">
     <summary class="tuner-summary"><span class="tuner-title">Tuner</span><span id="tuner-summary-status" class="tuner-summary-status">Waiting for input</span><span class="tuner-chevron" aria-hidden="true">▾</span></summary>
@@ -125,6 +179,18 @@
     </div>
   </details>
 </main>
+<dialog id="library-dialog" aria-labelledby="library-title">
+  <div class="library-heading">
+    <h2 id="library-title">Pedal library</h2>
+    <button id="library-close" type="button">Close</button>
+  </div>
+  <div class="library-toolbar">
+    <input id="search" type="search" placeholder="Search pedals" aria-label="Search pedal library">
+    <button id="import-effect" class="import-effect" type="button">＋ Import effect</button>
+  </div>
+  <div id="pedal-library" class="library"></div>
+  <button id="show-more" class="more" type="button" hidden>Show all pedals</button>
+</dialog>
 <dialog id="config"><h2 id="config-title"></h2><div id="config-fields"></div><button id="config-close" type="button">Close</button></dialog>
 <dialog id="import-dialog"><h2>Import LV2 effect</h2>
   <p>Choose a compatible LV2 plugin installed on this audio machine. Find more projects in the <a href="https://github.com/alex-tee/lv2-plugins-ultimate-list" target="_blank" rel="noopener noreferrer">LV2 plugin catalog</a>; install a plugin before importing it here.</p>
@@ -141,6 +207,7 @@ const tunerCents = document.getElementById('tuner-cents');
 const tunerNeedle = document.getElementById('tuner-needle');
 const tunerSummaryStatus = document.getElementById('tuner-summary-status');
 const board = document.getElementById('board');
+const libraryDialog = document.getElementById('library-dialog');
 const library = document.getElementById('pedal-library');
 const search = document.getElementById('search');
 const showMore = document.getElementById('show-more');
@@ -164,15 +231,19 @@ let available = {};
 let dragging = false;
 let timer;
 let installedEffects = [];
+let pedalDrag = null;
+let boardSignature = '';
 const pedalLooks = {
   overdrive: {color: '#f6a868', kind: 'Drive'},
   fuzz: {color: '#f3d46c', kind: 'Fuzz'},
   delay: {color: '#80b9ff', kind: 'Time'},
   tremolo: {color: '#d5a2ff', kind: 'Modulation'},
-  chorus: {color: '#89e1d3', kind: 'Modulation'}
+  chorus: {color: '#89e1d3', kind: 'Modulation'},
+  octave: {color: '#b9b0ff', kind: 'Pitch'}
 };
 function lookFor(name) { return pedalLooks[name] || {color: '#ed9eb0', kind: 'LV2 effect'}; }
 function render(state) {
+  if (pedalDrag) { renderTuner(state.tuner); return; }
   enabled = state.enabled;
   pedals = state.pedals || [];
   settings = state.settings || {};
@@ -211,10 +282,14 @@ function action(label, description, callback, disabled = false) {
   return button;
 }
 async function setBoard(next) {
-  try { await request('/api/board', {pedals: next}); }
-  catch (error) { status.textContent = error.message; }
+  try { await request('/api/board', {pedals: next}); return true; }
+  catch (error) { status.textContent = error.message; return false; }
 }
 function renderBoard() {
+  board.style.setProperty('--pedal-columns', Math.min(6, Math.max(5, pedals.length)));
+  const signature = JSON.stringify(pedals.map(name => [name, available[name]?.name, !!available[name]?.bypassed]));
+  if (signature === boardSignature) return;
+  boardSignature = signature;
   board.replaceChildren();
   if (!pedals.length) {
     const empty = document.createElement('span'); empty.className = 'empty';
@@ -222,11 +297,21 @@ function renderBoard() {
   }
   pedals.forEach((name, index) => {
     const card = document.createElement('div'); card.className = 'board-card';
+    card.dataset.pedal = name;
+    card.classList.toggle('bypassed', !!available[name]?.bypassed);
     const look = lookFor(name);
     card.style.setProperty('--pedal-accent', look.color);
     const top = document.createElement('div'); top.className = 'pedal-top';
     const kind = document.createElement('span'); kind.className = 'pedal-kind'; kind.textContent = look.kind;
-    const led = document.createElement('span'); led.className = 'pedal-led'; led.setAttribute('aria-hidden', 'true');
+    const bypassed = !!available[name]?.bypassed;
+    const led = action('', `${bypassed ? 'Enable' : 'Bypass'} ${available[name]?.name || name}`, async () => {
+      led.disabled = true;
+      try { await request('/api/bypass', {pedal: name, bypassed: !bypassed}); }
+      catch (error) { status.textContent = error.message; }
+      finally { led.disabled = false; }
+    });
+    led.className = 'pedal-led';
+    led.setAttribute('aria-pressed', String(!bypassed));
     top.append(kind, led);
     const title = document.createElement('strong'); title.textContent = available[name]?.name || name;
     const actions = document.createElement('div'); actions.className = 'actions';
@@ -244,6 +329,62 @@ function renderBoard() {
     card.append(top, title, actions); board.append(card);
   });
 }
+board.addEventListener('pointerdown', event => {
+  const card = event.target.closest('.board-card');
+  if (!card || event.button !== 0 || !event.isPrimary || event.target.closest('button, input, a') || pedalDrag) return;
+  const bounds = card.getBoundingClientRect();
+  pedalDrag = {card, pointerId: event.pointerId, x: event.clientX, y: event.clientY,
+    offsetX: event.clientX - bounds.left, offsetY: event.clientY - bounds.top,
+    width: bounds.width, height: bounds.height, order: [...pedals], ghost: null};
+  board.setPointerCapture(event.pointerId);
+});
+board.addEventListener('pointermove', event => {
+  const drag = pedalDrag;
+  if (!drag || event.pointerId !== drag.pointerId) return;
+  if (!drag.ghost && Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 7) return;
+  event.preventDefault();
+  if (!drag.ghost) {
+    drag.ghost = drag.card.cloneNode(true);
+    drag.ghost.classList.add('drag-ghost');
+    drag.ghost.setAttribute('aria-hidden', 'true');
+    drag.ghost.style.width = `${drag.width}px`;
+    drag.ghost.style.height = `${drag.height}px`;
+    document.body.append(drag.ghost);
+    drag.card.classList.add('is-dragging');
+    document.body.classList.add('pedal-dragging');
+  }
+  drag.ghost.style.left = `${event.clientX - drag.offsetX}px`;
+  drag.ghost.style.top = `${event.clientY - drag.offsetY}px`;
+  const target = document.elementFromPoint(event.clientX, event.clientY)?.closest('.board-card');
+  if (target && target !== drag.card && target.parentElement === board) {
+    const cards = [...board.children];
+    const from = cards.indexOf(drag.card), to = cards.indexOf(target);
+    const bounds = target.getBoundingClientRect();
+    const anotherRow = Math.abs(bounds.top - drag.card.getBoundingClientRect().top) > 20;
+    if (anotherRow || (from < to ? event.clientX > bounds.left + bounds.width / 2 : event.clientX < bounds.left + bounds.width / 2))
+      board.insertBefore(drag.card, from < to ? target.nextSibling : target);
+  }
+});
+async function finishPedalDrag(event, cancelled = false) {
+  const drag = pedalDrag;
+  if (!drag || event.pointerId !== drag.pointerId) return;
+  const next = [...board.querySelectorAll('.board-card')].map(card => card.dataset.pedal);
+  const bounds = board.getBoundingClientRect();
+  const inside = event.clientX >= bounds.left && event.clientX <= bounds.right && event.clientY >= bounds.top && event.clientY <= bounds.bottom;
+  pedalDrag = null;
+  drag.ghost?.remove();
+  drag.card.classList.remove('is-dragging');
+  document.body.classList.remove('pedal-dragging');
+  if (board.hasPointerCapture(event.pointerId)) board.releasePointerCapture(event.pointerId);
+  if (drag.ghost && !cancelled && inside && next.join(',') !== drag.order.join(',')) {
+    if (await setBoard(next)) return;
+  }
+  boardSignature = '';
+  renderBoard();
+}
+board.addEventListener('pointerup', event => finishPedalDrag(event));
+board.addEventListener('pointercancel', event => finishPedalDrag(event, true));
+board.addEventListener('lostpointercapture', event => finishPedalDrag(event, true));
 function renderLibrary() {
   library.replaceChildren();
   const query = search.value.trim().toLowerCase();
@@ -254,7 +395,9 @@ function renderLibrary() {
     const active = pedals.includes(name);
     const look = lookFor(name);
     const button = action(active ? `${info.name} on board` : `Add ${info.name}`,
-      `Add ${info.name} to board`, () => setBoard([...pedals, name]), active);
+      `Add ${info.name} to board`, async () => {
+        if (await setBoard([...pedals, name])) libraryDialog.close();
+      }, active);
     button.style.setProperty('--pedal-accent', look.color);
     const label = document.createElement('span'); label.className = 'library-name';
     label.textContent = active ? `${info.name} · on board` : `+ ${info.name}`;
@@ -265,6 +408,8 @@ function renderLibrary() {
   showMore.hidden = !!query || matching.length <= 6;
   showMore.textContent = libraryExpanded ? 'Show fewer' : `Show all ${matching.length} pedals`;
 }
+document.getElementById('add-pedal').addEventListener('click', () => libraryDialog.showModal());
+document.getElementById('library-close').addEventListener('click', () => libraryDialog.close());
 search.addEventListener('input', renderLibrary);
 showMore.addEventListener('click', () => { libraryExpanded = !libraryExpanded; renderLibrary(); });
 function renderInstalled() {
@@ -336,16 +481,30 @@ const specs = {
   fuzz: [['drive', 1, 100, 1], ['tone', 100, 8000, 1], ['level', 0, 1, .01]],
   delay: [['time', 20, 1500, 1], ['feedback', 0, .9, .01], ['mix', 0, 1, .01]],
   tremolo: [['rate', .1, 20, .1], ['depth', 0, 1, .01]],
-  chorus: [['rate', .1, 5, .1], ['depth', 0, 1, .01], ['mix', 0, 1, .01]]
+  chorus: [['rate', .1, 5, .1], ['depth', 0, 1, .01], ['mix', 0, 1, .01]],
+  octave: [['pitch', .5, 2, .5, 'Octave'], ['mix', 0, 1, .01, 'Octave blend']]
 };
 function openConfig(name) {
   configTitle.textContent = `${available[name].name} settings`;
   configFields.replaceChildren();
   const fields = specs[name] || Object.entries(available[name].ranges).map(([key, range]) =>
     [key, range.min ?? 0, range.max ?? 100, .01]);
-  for (const [key, min, max, step] of fields) {
+  for (const [key, min, max, step, title] of fields) {
     const row = document.createElement('div'); row.className = 'setting';
-    const label = document.createElement('label'); label.textContent = key[0].toUpperCase() + key.slice(1);
+    const label = document.createElement('label'); label.textContent = title || key[0].toUpperCase() + key.slice(1);
+    if (name === 'octave' && key === 'pitch') {
+      const select = document.createElement('select');
+      select.setAttribute('aria-label', 'Octave direction');
+      select.style.cssText = 'width:100%;min-height:44px;margin-top:8px;padding:8px;border:1px solid #637782;border-radius:8px;background:#11171c;color:#eef5f3;font:inherit';
+      for (const [value, text] of [[.5, 'One octave down'], [1, 'Original pitch'], [2, 'One octave up']])
+        select.add(new Option(text, value));
+      select.value = String(settings[name]?.[key] ?? .5);
+      select.addEventListener('change', async () => {
+        try { await request('/api/config', {pedal: name, setting: key, value: Number(select.value)}); }
+        catch (error) { status.textContent = error.message; }
+      });
+      row.append(label, select); configFields.append(row); continue;
+    }
     const output = document.createElement('output'); output.textContent = String(settings[name]?.[key] ?? min);
     const slider = document.createElement('input'); slider.type = 'range';
     Object.assign(slider, {min, max, step, value: settings[name]?.[key] ?? min});

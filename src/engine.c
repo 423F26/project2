@@ -113,6 +113,7 @@ static json_object *settings(const Pedal *pedal)
     if(pedal->kind == DELAY) { SET(time); SET(feedback); SET(mix); }
     if(pedal->kind == TREMOLO) { SET(rate); SET(depth); }
     if(pedal->kind == CHORUS) { SET(rate); SET(depth); SET(mix); }
+    if(strcmp(pedal->id, "octave") == 0) { SET(mix); }
 #undef SET
     if(pedal->kind == LV2)
         for(size_t i = 0; i < pedal->control_count; ++i)
@@ -156,9 +157,16 @@ static json_object *state(Engine *engine)
         json_object_object_add(all_settings, pedal->id, json_object_get(config));
         json_object *info = json_object_new_object();
         json_object_object_add(info, "name", json_object_new_string(pedal->name));
+        json_object_object_add(info, "bypassed", json_object_new_boolean(pedal->bypassed));
         json_object_object_add(info, "settings", config);
         json_object_object_add(info, "uri", pedal->kind == LV2 ? json_object_new_string(pedal->uri) : NULL);
         json_object *ranges = json_object_new_object();
+        if(strcmp(pedal->id, "octave") == 0) {
+            json_object *range = json_object_new_object();
+            json_object_object_add(range, "min", json_object_new_double(0));
+            json_object_object_add(range, "max", json_object_new_double(1));
+            json_object_object_add(ranges, "mix", range);
+        }
         if(pedal->kind == LV2)
             for(size_t p = 0; p < pedal->control_count; ++p) {
                 ControlPort *port = &pedal->controls[p];
@@ -278,6 +286,13 @@ static char *reply_command(Engine *engine, const char *command)
             if(engine_set_board(engine, indices, count)) result = state(engine);
             else snprintf(error, sizeof(error), "could not set board");
         }
+    } else if(strncmp(command, "bypass ", 7) == 0) {
+        char id[32], mode[8], extra;
+        if(sscanf(command + 7, "%31s %7s %c", id, mode, &extra) == 2 &&
+           (strcmp(mode, "on") == 0 || strcmp(mode, "off") == 0) &&
+           engine_set_bypass(engine, engine_find(engine, id), strcmp(mode, "on") == 0))
+            result = state(engine);
+        else snprintf(error, sizeof(error), "use bypass PEDAL on|off");
     } else if(strncmp(command, "config ", 7) == 0) {
         char id[32], setting[96], number[128], extra;
         double value;
@@ -387,8 +402,9 @@ static bool audio_loop(Engine *engine, const char *input_device, const char *out
     if(!input || !output) { free(input); free(output); snd_pcm_close(capture); snd_pcm_close(playback); return false; }
     unsigned capture_recoveries = 0, playback_recoveries = 0;
     size_t frames = 0;
-    double squares = 0;
-    int peak = 0;
+    double squares = 0, output_squares = 0;
+    int peak = 0, output_peak = 0;
+    size_t clipped = 0;
     bool success = true;
     printf("guitar effect: %s -> %s; mode=effect; Ctrl+C to stop\n", input_device, output_device);
     fflush(stdout);
@@ -401,22 +417,32 @@ static bool audio_loop(Engine *engine, const char *input_device, const char *out
             continue;
         }
         if(got == 0) continue;
+        engine_process(engine, input, output, (size_t)got);
         if(meter) {
             for(snd_pcm_sframes_t i = 0; i < got; ++i) {
                 double sample = input[i] / 32768.0;
                 squares += sample * sample;
                 int amplitude = abs(input[i]);
                 if(amplitude > peak) peak = amplitude;
+                double processed = output[i] / 32768.0;
+                output_squares += processed * processed;
+                amplitude = abs(output[i]);
+                if(amplitude > output_peak) output_peak = amplitude;
+                if(amplitude >= 32767) clipped++;
             }
             frames += (size_t)got;
             if(frames >= (size_t)engine->rate * 2) {
-                printf("input rms=%.4f peak=%.4f capture_recoveries=%u playback_recoveries=%u\n",
-                       sqrt(squares / frames), peak / 32768.0, capture_recoveries, playback_recoveries);
+                double input_rms = sqrt(squares / frames);
+                double output_rms = sqrt(output_squares / frames);
+                printf("input rms=%.8f peak=%.4f input_dbfs=%.1f output_dbfs=%.1f output_peak=%.4f clipped=%zu capture_recoveries=%u playback_recoveries=%u\n",
+                       input_rms, peak / 32768.0, 20 * log10(fmax(input_rms, 1e-12)),
+                       20 * log10(fmax(output_rms, 1e-12)), output_peak / 32768.0,
+                       clipped, capture_recoveries, playback_recoveries);
                 fflush(stdout);
-                frames = 0; squares = 0; peak = 0;
+                frames = 0; squares = 0; output_squares = 0;
+                peak = 0; output_peak = 0; clipped = 0;
             }
         }
-        engine_process(engine, input, output, (size_t)got);
         size_t written = 0;
         while(written < (size_t)got && running) {
             snd_pcm_sframes_t count = snd_pcm_writei(playback, output + written, (size_t)got - written);
@@ -525,6 +551,9 @@ int main(int argc, char **argv)
             engine_free(engine); free(engine); return 1;
         }
     }
+    /* Installed octave support is available in the library on every launch. */
+    char octave_error[256] = "";
+    (void)lv2_load(engine, OCTAVE_URI, octave_error, sizeof(octave_error));
     int listener = open_control(socket_path);
     if(listener < 0) {
         fprintf(stderr, "could not bind control socket %s: %s\n", socket_path, strerror(errno));

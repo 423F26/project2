@@ -1,0 +1,11 @@
+@prefix lv2: <http://lv2plug.in/ns/lv2core#> .
+@prefix doap: <http://usefulinc.com/ns/doap#> .
+<urn:pipedal:octave> a lv2:Plugin, lv2:PitchPlugin ;
+    doap:name "Octave" ;
+    lv2:optionalFeature lv2:hardRTCapable ;
+    lv2:port [ a lv2:InputPort, lv2:ControlPort ; lv2:index 0 ; lv2:symbol "pitch" ;
+               lv2:name "Pitch ratio" ; lv2:default 0.5 ; lv2:minimum 0.5 ; lv2:maximum 2.0 ],
+             [ a lv2:InputPort, lv2:AudioPort ; lv2:index 1 ; lv2:symbol "input" ; lv2:name "Input" ],
+             [ a lv2:OutputPort, lv2:AudioPort ; lv2:index 2 ; lv2:symbol "output" ; lv2:name "Output" ],
+             [ a lv2:OutputPort, lv2:ControlPort ; lv2:index 3 ; lv2:symbol "latency" ;
+               lv2:name "Latency" ; lv2:designation lv2:latency ; lv2:portProperty lv2:reportsLatency ] .

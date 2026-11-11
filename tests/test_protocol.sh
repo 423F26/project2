@@ -22,6 +22,13 @@ for i in {1..100}; do [[ -S $PEDAL_CONTROL_SOCKET ]] && break; sleep .02; done
 "$control" state | jq -e '.pedals == ["overdrive"] and .enabled == true'
 "$control" board fuzz,delay | jq -e '.pedals == ["fuzz","delay"]'
 "$control" config delay time 450 | jq -e '.settings.delay.time == 450'
+"$control" bypass fuzz on | jq -e '.available.fuzz.bypassed == true and .pedals == ["fuzz","delay"]'
+"$control" board delay,fuzz | jq -e '.available.fuzz.bypassed == true'
+"$control" bypass fuzz off | jq -e '.available.fuzz.bypassed == false'
+if "$control" bypass missing on >"$tmp/invalid" 2>&1; then exit 1; fi
+if "$control" bypass fuzz perhaps >"$tmp/invalid" 2>&1; then exit 1; fi
+if "$control" bypass fuzz on extra >"$tmp/invalid" 2>&1; then exit 1; fi
+"$control" board fuzz,delay > /dev/null
 if "$control" config delay time 2000 >"$tmp/invalid" 2>&1; then exit 1; fi
 if "$control" board fuzz,fuzz >"$tmp/invalid" 2>&1; then exit 1; fi
 "$control" state | jq -e '.pedals == ["fuzz","delay"] and .settings.delay.time == 450'
@@ -47,6 +54,12 @@ jq -e '.pedals == []' "$tmp/state"
 curl -fsS "http://127.0.0.1:$port/" >"$tmp/page"
 grep -q 'Import effect' "$tmp/page"
 curl -fsS -H 'Content-Type: application/json' -d '{"pedals":["chorus","tremolo"]}' "http://127.0.0.1:$port/api/board" | jq -e '.pedals == ["chorus","tremolo"]'
+curl -fsS -H 'Content-Type: application/json' -d '{"pedal":"chorus","bypassed":true}' "http://127.0.0.1:$port/api/bypass" | jq -e '.available.chorus.bypassed == true and .pedals == ["chorus","tremolo"]'
+curl -fsS -H 'Content-Type: application/json' -d '{"pedal":"chorus","bypassed":false}' "http://127.0.0.1:$port/api/bypass" | jq -e '.available.chorus.bypassed == false'
+for payload in '{"pedal":"missing","bypassed":true}' '{"pedal":"chorus","bypassed":1}' '{"pedal":"chorus","bypassed":"false"}'; do
+  code=$(curl -sS -o "$tmp/rejected" -w '%{http_code}' -H 'Content-Type: application/json' -d "$payload" "http://127.0.0.1:$port/api/bypass")
+  [[ $code == 400 ]]
+done
 curl -fsS -H 'Content-Type: application/json' -d '{"enabled":false}' "http://127.0.0.1:$port/api/mode" | jq -e '.enabled == false'
 curl -fsS "http://127.0.0.1:$port/api/lv2" | jq -e 'any(.plugins[]; .uri == "https://example.org/c-pedal/test-gain")'
 curl -fsS "http://127.0.0.1:$port/api/midi" | jq -e '.events == []'

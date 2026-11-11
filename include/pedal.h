@@ -11,6 +11,7 @@
 #define MAX_ACTIVE 32
 #define MAX_PORTS 128
 #define MAX_BLOCK 8192
+#define OCTAVE_URI "urn:pipedal:octave"
 
 typedef enum { OVERDRIVE, FUZZ, DELAY, TREMOLO, CHORUS, LV2 } PedalKind;
 
@@ -27,6 +28,7 @@ typedef struct {
 
 typedef struct {
     PedalKind kind;
+    bool bypassed;
     int sample_rate;
     char id[32];
     char name[256];
@@ -65,6 +67,7 @@ bool engine_init(Engine *engine, int rate, size_t block, double clean_level);
 void engine_free(Engine *engine);
 Pedal *engine_find(Engine *engine, const char *id);
 bool engine_set_board(Engine *engine, const size_t *indices, size_t count);
+bool engine_set_bypass(Engine *engine, Pedal *pedal, bool bypassed);
 bool engine_config(Engine *engine, Pedal *pedal, const char *name, double value);
 void engine_process(Engine *engine, const int16_t *input, int16_t *output, size_t count);
 bool pedal_clone(Pedal *destination, const Pedal *source);
