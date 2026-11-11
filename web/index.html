@@ -77,6 +77,8 @@
   #audio-open { width: auto; min-height: 44px; padding: 0 16px; border-radius: 10px; font-size: 1rem; background: #34444b; color: #eef5f3; }
   #audio-dialog { box-sizing: border-box; width: min(580px, calc(100% - 32px)); max-height: calc(100dvh - 24px); overflow-y: auto; }
   #audio-dialog input[type=range] { min-height: 36px; }
+  #audio-dialog p { margin: 0 0 6px; }
+  #audio-dialog .setting { margin: 10px 0; }
   #audio-dialog output { font-variant-numeric: tabular-nums; }
   #audio-mute { width: auto; min-height: 44px; padding: 0 20px; margin: 8px 0 16px; background: #34444b; color: #eef5f3; }
   #audio-info, #audio-inputs { font-size: .85rem; line-height: 1.5; }
@@ -204,7 +206,7 @@
   <button id="show-more" class="more" type="button" hidden>Show all pedals</button>
 </dialog>
 <dialog id="audio-dialog" aria-labelledby="audio-title">
-  <h2 id="audio-title">Audio · HiFiBerry / ADAC</h2>
+  <h2 id="audio-title" tabindex="-1">Audio · HiFiBerry / ADAC</h2>
   <p>Hardware levels before and after the pedal chain.</p>
   <div class="setting"><label for="audio-volume">Output level <output id="audio-volume-value">— dB</output></label>
     <input id="audio-volume" type="range" min="-60" max="0" step="1" value="-12" disabled></div>
@@ -526,7 +528,9 @@ async function updateAudio(settings) {
 }
 document.getElementById('audio-open').addEventListener('click', async () => {
   audioDialog.showModal();
-  try { await updateAudio(); } catch (error) { audioStatus.textContent = error.message; }
+  document.getElementById('audio-title').focus({preventScroll: true});
+  audioDialog.scrollTop = 0;
+  try { await updateAudio(); audioDialog.scrollTop = 0; } catch (error) { audioStatus.textContent = error.message; }
 });
 document.getElementById('audio-close').addEventListener('click', () => audioDialog.close());
 for (const [control, key, output] of [[audioVolume, 'volume_db', 'audio-volume-value'], [audioGain, 'input_gain_db', 'audio-gain-value']]) {

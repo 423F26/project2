@@ -149,6 +149,11 @@ outputs; these connections must remain consistent with its design.
   ADC gain 0 dB, DAC volume -30 dB, and desktop automatic login.
 - The installed desktop shortcut was launched successfully, and a further reboot
   confirmed the XDG autostart entry opens the current native UI and ADAC engine.
+- Audio settings were exercised against the actual ADAC mixer through the HTTP
+  API, including level, input gain, mute, rejected unsupported controls, and saved
+  settings. The browser slider was checked against the physical mixer value.
+- With the two-period startup threshold, runtime reports show approximately
+  4.8–5 ms of queued playback audio. This excludes converter and effect delay.
 
 These checks establish driver binding and digital streaming, not analogue
 input/output quality, measured latency, or electrical validation of the assembled
