@@ -82,7 +82,7 @@ Boot launch is installed for the `pi` desktop user with:
 ./scripts/install-pi-desktop.sh --autostart
 ```
 
-This installs the shortcut in `~/Desktop/Guitar Pedal.desktop`, the applications
+This installs the shortcut in `~/Desktop/Riffline.desktop`, the applications
 menu entry in `~/.local/share/applications/guitar-pedal.desktop`, and the login
 entry in `~/.config/autostart/guitar-pedal.desktop`. All point at the same checkout's
 `run-pedal.sh`. Raspberry Pi OS's labwc desktop runs XDG autostart entries; with

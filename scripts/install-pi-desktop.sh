@@ -18,7 +18,7 @@ from pathlib import Path
 import sys
 
 root, desktop, applications, autostart = map(Path, sys.argv[1:5])
-text = (root / 'Guitar Pedal.desktop').read_text()
+text = (root / 'Riffline.desktop').read_text()
 # Desktop Entry Exec is parsed without a shell; quote reserved characters.
 executable = str(root / 'run-pedal.sh')
 escaped = ''.join('\\' + c if c in '\\"`$' else c for c in executable)
@@ -29,7 +29,7 @@ text = '\n'.join(
     'Path=' + str(root).replace('\\', '\\\\') if line.startswith('Path=') else line
     for line in text.splitlines()
 ) + '\n'
-destinations = [desktop / 'Guitar Pedal.desktop', applications / 'guitar-pedal.desktop']
+destinations = [desktop / 'Riffline.desktop', applications / 'guitar-pedal.desktop']
 if sys.argv[5] == 'true':
     destinations.append(autostart / 'guitar-pedal.desktop')
 for destination in destinations:
@@ -37,7 +37,12 @@ for destination in destinations:
     destination.write_text(text)
     destination.chmod(0o755)
     print('Installed:', destination)
+# PCManFM displays the desktop filename even when the entry has a new Name.
+# Remove only the older shortcut generated for this exact launcher.
+legacy = desktop / 'Guitar Pedal.desktop'
+if legacy.is_file() and 'Exec="' + escaped + '"' in legacy.read_text().splitlines():
+    legacy.unlink()
 PY
 if command -v gio >/dev/null; then
-    gio set "$desktop_dir/Guitar Pedal.desktop" metadata::trusted true 2>/dev/null || true
+    gio set "$desktop_dir/Riffline.desktop" metadata::trusted true 2>/dev/null || true
 fi
