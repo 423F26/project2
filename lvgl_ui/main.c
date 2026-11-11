@@ -27,12 +27,12 @@
 #define C_ACCENT 0x43E0A0
 #define C_GOLD 0xF0B968
 
-enum { OVERDRIVE, FUZZ, DELAY, TREMOLO, CHORUS, OCTAVE, PEDAL_COUNT };
-static const char * pedal_names[PEDAL_COUNT] = {"overdrive", "fuzz", "delay", "tremolo", "chorus", "octave"};
-static const char * pedal_titles[PEDAL_COUNT] = {"OVERDRIVE", "FUZZ", "DELAY", "TREMOLO", "CHORUS", "OCTAVE"};
-static const char * pedal_details[PEDAL_COUNT] = {"WARM DRIVE", "HARD CLIP", "ECHO", "PULSE", "MODULATE", "PITCH SHIFT"};
-static const uint32_t pedal_colors[PEDAL_COUNT] = {C_ACCENT, C_GOLD, 0x85B6FA, 0xD8A7F2, 0xF59E9E, 0xB9B0FF};
-static const uint32_t pedal_bodies[PEDAL_COUNT] = {0x1D3940, 0x3B3428, 0x26374B, 0x382E4A, 0x3D3038, 0x302D46};
+enum { OVERDRIVE, FUZZ, DELAY, TREMOLO, CHORUS, LIMITER, OCTAVE, PEDAL_COUNT };
+static const char * pedal_names[PEDAL_COUNT] = {"overdrive", "fuzz", "delay", "tremolo", "chorus", "limiter", "octave"};
+static const char * pedal_titles[PEDAL_COUNT] = {"OVERDRIVE", "FUZZ", "DELAY", "TREMOLO", "CHORUS", "LIMITER", "OCTAVE"};
+static const char * pedal_details[PEDAL_COUNT] = {"WARM DRIVE", "HARD CLIP", "ECHO", "PULSE", "MODULATE", "PEAK CONTROL", "PITCH SHIFT"};
+static const uint32_t pedal_colors[PEDAL_COUNT] = {C_ACCENT, C_GOLD, 0x85B6FA, 0xD8A7F2, 0xF59E9E, 0xF5CB77, 0xB9B0FF};
+static const uint32_t pedal_bodies[PEDAL_COUNT] = {0x1D3940, 0x3B3428, 0x26374B, 0x382E4A, 0x3D3038, 0x403725, 0x302D46};
 static bool live_mode;
 static bool ui_running = true;
 static bool bypassed[PEDAL_COUNT];
@@ -49,6 +49,7 @@ static bool drag_moved;
 
 static lv_obj_t * tiles[PEDAL_COUNT];
 static lv_obj_t * tile_details[PEDAL_COUNT];
+static lv_obj_t * tile_titles[PEDAL_COUNT];
 static lv_obj_t * tile_leds[PEDAL_COUNT];
 static lv_obj_t * gear_buttons[PEDAL_COUNT];
 static lv_obj_t * path_label;
@@ -60,6 +61,17 @@ static lv_obj_t * amount_label;
 static lv_obj_t * config_overlay;
 static lv_obj_t * library_overlay;
 static lv_obj_t * audio_overlay;
+static lv_obj_t * tuner_overlay;
+static lv_obj_t * tuner_note_label;
+static lv_obj_t * tuner_frequency_label;
+static lv_obj_t * tuner_cents_label;
+static lv_obj_t * tuner_needle;
+static lv_obj_t * tuner_toggle_label;
+static bool tuner_enabled = true, tuner_has_note;
+static char tuner_note[16];
+static double tuner_frequency, tuner_cents;
+static lv_obj_t * input_port;
+static lv_obj_t * output_port;
 static lv_obj_t * audio_sliders[2];
 static lv_obj_t * audio_values[2];
 static lv_obj_t * audio_status;
@@ -68,27 +80,30 @@ static lv_obj_t * audio_inputs;
 static lv_obj_t * audio_mute;
 static lv_obj_t * audio_mute_label;
 static bool output_muted;
-static lv_obj_t * config_values[9];
-static lv_obj_t * config_sliders[9];
 static lv_obj_t * config_status;
 static int config_pedal = -1;
 enum { DRIVE, TONE, MIX, LEVEL };
-enum { TIME = 4, FEEDBACK, RATE, DEPTH, PITCH, PARAMETER_COUNT };
-static const char * parameter_names[PARAMETER_COUNT] = {"drive", "tone", "mix", "level", "time", "feedback", "rate", "depth", "pitch"};
+enum { TIME = 4, FEEDBACK, RATE, DEPTH, PITCH, CEILING, RELEASE, PARAMETER_COUNT };
+static lv_obj_t * config_values[PARAMETER_COUNT];
+static lv_obj_t * config_sliders[PARAMETER_COUNT];
+static const char * parameter_names[PARAMETER_COUNT] = {"drive", "tone", "mix", "level", "time", "feedback", "rate", "depth", "pitch", "ceiling", "release"};
 static const int pedal_parameters[PEDAL_COUNT][4] = {
     {DRIVE, TONE, MIX, LEVEL}, {DRIVE, TONE, LEVEL, -1},
-    {TIME, FEEDBACK, MIX, -1}, {RATE, DEPTH, -1, -1}, {RATE, DEPTH, MIX, -1}, {PITCH, MIX, -1, -1}
+    {TIME, FEEDBACK, MIX, -1}, {RATE, DEPTH, -1, -1}, {RATE, DEPTH, MIX, -1},
+    {CEILING, RELEASE, -1, -1}, {PITCH, MIX, -1, -1}
 };
 static float settings[PEDAL_COUNT][PARAMETER_COUNT] = {
     {20.0f, 3000.0f, 1.0f, 0.5f}, {15.0f, 2500.0f, 0.0f, 0.45f},
     {[TIME] = 300.0f, [FEEDBACK] = 0.35f, [MIX] = 0.35f},
     {[RATE] = 5.0f, [DEPTH] = 0.7f},
     {[RATE] = 1.2f, [DEPTH] = 0.5f, [MIX] = 0.5f},
+    {[CEILING] = -1.0f, [RELEASE] = 80.0f},
     {[PITCH] = .5f, [MIX] = .65f}
 };
 
 static void refresh_state(lv_timer_t * timer);
 static void audio_open(lv_event_t *event);
+static void tuner_open(lv_event_t *event);
 
 static lv_color_t color(uint32_t hex)
 {
@@ -117,6 +132,16 @@ static lv_obj_t * label(lv_obj_t * parent, const char * text, int x, int y,
     lv_obj_set_style_text_color(obj, color(fg), 0);
     lv_obj_set_style_text_font(obj, font, 0);
     return obj;
+}
+
+static lv_obj_t * button_label(lv_obj_t *button, const char *text,
+                               const lv_font_t *font, uint32_t fg)
+{
+    lv_obj_t *text_label = label(button, text, 0, 0, font, fg);
+    lv_obj_set_width(text_label, LV_PCT(100));
+    lv_obj_set_style_text_align(text_label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_center(text_label);
+    return text_label;
 }
 
 static void show_status(const char * message, uint32_t fg)
@@ -161,6 +186,13 @@ static bool read_state(void)
     if(!board || !json_object_is_type(board, json_type_array)) { json_object_put(root); return false; }
     enabled = json_object_get_boolean(json_object_object_get(root, "enabled"));
     amount = (int)lround(100 * json_object_get_double(json_object_object_get(root, "amount")));
+    json_object *tuner = json_object_object_get(root, "tuner");
+    json_object *note = tuner ? json_object_object_get(tuner, "note") : NULL;
+    tuner_enabled = tuner && json_object_get_boolean(json_object_object_get(tuner, "enabled"));
+    tuner_has_note = tuner_enabled && note && json_object_is_type(note, json_type_string);
+    snprintf(tuner_note, sizeof(tuner_note), "%s", tuner_has_note ? json_object_get_string(note) : "--");
+    tuner_frequency = json_object_get_double(json_object_object_get(tuner, "frequency"));
+    tuner_cents = json_object_get_double(json_object_object_get(tuner, "cents"));
     active_count = 0;
     view_only = false;
     for(size_t i = 0; i < json_object_array_length(board); ++i) {
@@ -204,11 +236,14 @@ static void render_board(void)
     }
     strcat(path, "  >  OUTPUT");
     lv_label_set_text(path_label, path);
+    lv_obj_set_style_text_font(path_label, active_count >= 6 ? &lv_font_montserrat_12 : &lv_font_montserrat_14, 0);
 
-    int width = active_count <= 4 ? 164 : active_count == 5 ? 130 : 112;
-    int gap = active_count <= 4 ? 12 : 10;
+    int width = active_count <= 4 ? 164 : active_count == 5 ? 130 : active_count == 6 ? 112 : 96;
+    int gap = active_count <= 4 ? 12 : 8;
     int total = active_count * width + (active_count ? active_count - 1 : 0) * gap;
     int left = 400 - total / 2;
+    lv_obj_set_hidden(input_port, active_count >= 4);
+    lv_obj_set_hidden(output_port, active_count >= 4);
     for(int pedal = 0; pedal < PEDAL_COUNT; ++pedal) {
         int index = board_index(pedal);
         if(index < 0) {
@@ -218,8 +253,12 @@ static void render_board(void)
         lv_obj_set_hidden(tiles[pedal], false);
         lv_obj_set_pos(tiles[pedal], left + index * (width + gap), 169);
         lv_obj_set_size(tiles[pedal], width, 100);
+        lv_obj_set_width(tile_titles[pedal], width - 16);
+        lv_obj_set_style_text_font(tile_titles[pedal], active_count >= 6 ? &lv_font_montserrat_12 : &lv_font_montserrat_14, 0);
         lv_obj_set_style_bg_color(tiles[pedal], color(bypassed[pedal] ? C_CARD : pedal_bodies[pedal]), 0);
-        lv_label_set_text(tile_details[pedal], pedal_details[pedal]);
+        static const char *compact_details[PEDAL_COUNT] = {"DRIVE", "CLIP", "ECHO", "PULSE", "SWIRL", "PEAKS", "PITCH"};
+        lv_label_set_text(tile_details[pedal], active_count >= 6 ? compact_details[pedal] : pedal_details[pedal]);
+        lv_obj_set_style_text_font(tile_details[pedal], active_count >= 6 ? &lv_font_montserrat_12 : &lv_font_montserrat_14, 0);
         lv_obj_set_pos(gear_buttons[pedal], width - 38, 62);
         lv_obj_set_size(gear_buttons[pedal], 30, 30);
         lv_obj_set_pos(led_buttons[pedal], width - 38, 2);
@@ -350,18 +389,20 @@ static void library_open(lv_event_t * event)
     lv_obj_t * icon = label(close, LV_SYMBOL_CLOSE, 0, 0, &lv_font_montserrat_20, C_TEXT);
     lv_obj_center(icon);
     for(int pedal = 0; pedal < PEDAL_COUNT; ++pedal) {
-        int col = pedal % 2;
-        int row = pedal / 2;
-        lv_obj_t * button = box(panel, 28 + col * 275, 93 + row * 80, 258, 64,
+        int col = pedal % 3;
+        int row = pedal / 3;
+        lv_obj_t * button = box(panel, 28 + col * 188, 93 + row * 88, 178, 72,
                                 board_index(pedal) >= 0 ? C_TILE : pedal_bodies[pedal], 10);
         lv_obj_set_style_border_color(button, color(pedal_colors[pedal]), 0);
         lv_obj_set_style_border_width(button, 1, 0);
-        box(button, 0, 0, 5, 64, pedal_colors[pedal], 2);
+        box(button, 0, 0, 5, 72, pedal_colors[pedal], 2);
         lv_obj_set_clickable(button, true);
         lv_obj_add_event_cb(button, library_select, LV_EVENT_CLICKED, (void *)(intptr_t)pedal);
-        label(button, pedal_titles[pedal], 12, 10, &lv_font_montserrat_16, pedal_colors[pedal]);
-        label(button, board_index(pedal) >= 0 ? "ON BOARD" : pedal_details[pedal],
-              12, 37, &lv_font_montserrat_14, C_MUTED);
+        lv_obj_t *title = button_label(button, pedal_titles[pedal], &lv_font_montserrat_16, pedal_colors[pedal]);
+        lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 14);
+        lv_obj_t *detail = button_label(button, board_index(pedal) >= 0 ? "ON BOARD" : pedal_details[pedal],
+                                       &lv_font_montserrat_12, C_MUTED);
+        lv_obj_align(detail, LV_ALIGN_BOTTOM_MID, 0, -13);
     }
 }
 
@@ -412,7 +453,8 @@ static void format_config_value(int parameter, int value, char * text, size_t si
 {
     if(parameter == PITCH) snprintf(text, size, "%s", value < 0 ? "DOWN" : value > 0 ? "UP" : "NORMAL");
     else if(parameter == TONE) snprintf(text, size, "%d Hz", value);
-    else if(parameter == TIME) snprintf(text, size, "%d ms", value);
+    else if(parameter == TIME || parameter == RELEASE) snprintf(text, size, "%d ms", value);
+    else if(parameter == CEILING) snprintf(text, size, "%d dB", value);
     else if(parameter == RATE) snprintf(text, size, "%.1f Hz", value / 10.0f);
     else if(parameter == DRIVE) snprintf(text, size, "%dx", value);
     else snprintf(text, size, "%d%%", value);
@@ -469,14 +511,15 @@ static void config_open(lv_event_t * event)
     char heading[48];
     snprintf(heading, sizeof(heading), "%s  /  SETTINGS", pedal_titles[pedal]);
     label(panel, heading, 28, 22, &lv_font_montserrat_20, pedal_colors[pedal]);
-    label(panel, "Adjust this pedal independently", 28, 53, &lv_font_montserrat_14, C_MUTED);
+    label(panel, pedal == LIMITER ? "Instant attack / no lookahead / place last for peak control" :
+          "Adjust this pedal independently", 28, 53, &lv_font_montserrat_14, C_MUTED);
     lv_obj_t * close = box(panel, 541, 16, 44, 44, C_TILE, 10);
     lv_obj_set_clickable(close, true);
     lv_obj_add_event_cb(close, config_close, LV_EVENT_CLICKED, NULL);
     lv_obj_t * close_icon = label(close, LV_SYMBOL_CLOSE, 0, 0, &lv_font_montserrat_20, C_TEXT);
     lv_obj_center(close_icon);
 
-    const char * titles[PARAMETER_COUNT] = {"DRIVE", "TONE", "MIX", "LEVEL", "TIME", "FEEDBACK", "RATE", "DEPTH", "OCTAVE"};
+    const char * titles[PARAMETER_COUNT] = {"DRIVE", "TONE", "MIX", "LEVEL", "TIME", "FEEDBACK", "RATE", "DEPTH", "OCTAVE", "CEILING", "RELEASE"};
     int rows = 0;
     while(rows < 4 && pedal_parameters[pedal][rows] >= 0) rows++;
     for(int row = 0; row < rows; ++row) {
@@ -491,6 +534,8 @@ static void config_open(lv_event_t * event)
         int maximum = parameter == DRIVE ? 100 : parameter == TONE ? 8000 : parameter == TIME ? 1500 :
                       parameter == RATE ? (pedal == CHORUS ? 50 : 200) : parameter == FEEDBACK ? 90 : 100;
         if(parameter == PITCH) { minimum = -1; maximum = 1; }
+        if(parameter == CEILING) { minimum = -36; maximum = 0; }
+        if(parameter == RELEASE) { minimum = 5; maximum = 1000; }
         lv_slider_set_range(control, minimum, maximum);
         lv_obj_set_style_bg_color(control, color(C_LINE), LV_PART_MAIN);
         lv_obj_set_style_bg_color(control, color(pedal_colors[pedal]), LV_PART_INDICATOR);
@@ -600,8 +645,7 @@ static void audio_open(lv_event_t *event)
     audio_mute = box(panel, 30, 241, 238, 44, C_TILE, 10);
     lv_obj_set_clickable(audio_mute, true);
     lv_obj_add_event_cb(audio_mute, audio_apply, LV_EVENT_CLICKED, (void *)(intptr_t)2);
-    audio_mute_label = label(audio_mute, "OUTPUT ON", 0, 0, &lv_font_montserrat_14, C_ACCENT);
-    lv_obj_center(audio_mute_label);
+    audio_mute_label = button_label(audio_mute, "OUTPUT ON", &lv_font_montserrat_14, C_ACCENT);
     label(panel, "Gain applies before effects", 288, 255, &lv_font_montserrat_14, C_MUTED);
     audio_info = label(panel, "", 30, 305, &lv_font_montserrat_14, C_TEXT);
     audio_inputs = label(panel, "", 30, 329, &lv_font_montserrat_14, C_MUTED);
@@ -611,10 +655,90 @@ static void audio_open(lv_event_t *event)
     audio_refresh();
 }
 
+static void tuner_render(bool connected)
+{
+    bool tracking = connected && tuner_enabled && tuner_has_note;
+    uint32_t fg = tracking && fabs(tuner_cents) <= 5 ? C_ACCENT : C_TEXT;
+    lv_label_set_text(tuner_note_label, tracking ? tuner_note : "--");
+    lv_obj_set_style_text_color(tuner_note_label, color(fg), 0);
+    if(tracking) {
+        lv_label_set_text_fmt(tuner_frequency_label, "%.1f Hz", tuner_frequency);
+        lv_label_set_text_fmt(tuner_cents_label, "%+.1f cents  /  %s", tuner_cents,
+                              fabs(tuner_cents) <= 5 ? "IN TUNE" : tuner_cents < 0 ? "TUNE UP" : "TUNE DOWN");
+    } else {
+        lv_label_set_text(tuner_frequency_label, !connected ? "Pedal disconnected" :
+                          tuner_enabled ? "Play a single note" : "Pitch tracking paused");
+        lv_label_set_text(tuner_cents_label, "A4 = 440 Hz");
+    }
+    lv_obj_set_hidden(tuner_needle, !tracking);
+    lv_obj_set_x(tuner_needle, 268 + (int)lround(fmax(-50, fmin(50, tuner_cents)) * 4.8));
+    lv_label_set_text(tuner_toggle_label, tuner_enabled ? "TRACKING ON" : "TRACKING OFF");
+}
+
+static void tuner_tick(lv_timer_t *timer)
+{
+    (void)timer;
+    if(tuner_overlay) tuner_render(!live_mode || read_state());
+}
+
+static void tuner_close(lv_event_t *event)
+{
+    (void)event;
+    lv_obj_delete_async(tuner_overlay);
+    tuner_overlay = NULL;
+    refresh_state(NULL);
+}
+
+static void tuner_toggle(lv_event_t *event)
+{
+    (void)event;
+    if(live_mode) {
+        char reply[32768];
+        if(!command(tuner_enabled ? "tuner off" : "tuner on", reply, sizeof(reply))) {
+            tuner_render(false);
+            return;
+        }
+    } else tuner_enabled = !tuner_enabled;
+    tuner_tick(NULL);
+}
+
+static void tuner_open(lv_event_t *event)
+{
+    (void)event;
+    if(tuner_overlay) return;
+    tuner_overlay = box(lv_screen_active(), 0, 0, WIDTH, HEIGHT, C_BG, 0);
+    lv_obj_set_style_bg_opa(tuner_overlay, LV_OPA_80, 0);
+    lv_obj_t *panel = box(tuner_overlay, 94, 45, 612, 390, C_CARD, 20);
+    label(panel, "TUNER", 28, 22, &lv_font_montserrat_20, C_ACCENT);
+    label(panel, "Clean input / audio continues while tuning", 28, 53, &lv_font_montserrat_14, C_MUTED);
+    lv_obj_t *close = box(panel, 541, 16, 44, 44, C_TILE, 10);
+    lv_obj_set_clickable(close, true);
+    lv_obj_add_event_cb(close, tuner_close, LV_EVENT_CLICKED, NULL);
+    button_label(close, LV_SYMBOL_CLOSE, &lv_font_montserrat_20, C_TEXT);
+    tuner_note_label = button_label(panel, "--", &lv_font_montserrat_36, C_TEXT);
+    lv_obj_align(tuner_note_label, LV_ALIGN_TOP_MID, 0, 101);
+    tuner_frequency_label = button_label(panel, "Play a single note", &lv_font_montserrat_20, C_MUTED);
+    lv_obj_align(tuner_frequency_label, LV_ALIGN_TOP_MID, 0, 159);
+    lv_obj_t *scale = box(panel, 36, 222, 540, 32, C_CARD, 0);
+    box(scale, 28, 13, 484, 6, C_LINE, 3);
+    box(scale, 246, 13, 48, 6, C_ACCENT, 3);
+    box(scale, 269, 3, 2, 26, C_TEXT, 0);
+    label(scale, "-", 2, 5, &lv_font_montserrat_20, C_GOLD);
+    label(scale, "+", 522, 5, &lv_font_montserrat_20, C_GOLD);
+    tuner_needle = box(scale, 268, 0, 4, 32, C_GOLD, 2);
+    tuner_cents_label = button_label(panel, "A4 = 440 Hz", &lv_font_montserrat_16, C_TEXT);
+    lv_obj_align(tuner_cents_label, LV_ALIGN_TOP_MID, 0, 274);
+    lv_obj_t *toggle = box(panel, 190, 323, 232, 44, C_TILE, 10);
+    lv_obj_set_clickable(toggle, true);
+    lv_obj_add_event_cb(toggle, tuner_toggle, LV_EVENT_CLICKED, NULL);
+    tuner_toggle_label = button_label(toggle, "TRACKING ON", &lv_font_montserrat_14, C_ACCENT);
+    tuner_tick(NULL);
+}
+
 static void refresh_state(lv_timer_t * timer)
 {
     (void)timer;
-    if(!live_mode || dragging >= 0 || config_overlay || library_overlay || audio_overlay) return;
+    if(!live_mode || dragging >= 0 || config_overlay || library_overlay || audio_overlay || tuner_overlay) return;
     if(read_state()) {
         render_board();
         show_status(view_only ? "USE BROWSER FOR LV2 CHAIN" : "CONNECTED TO PEDAL",
@@ -630,29 +754,40 @@ static void build_ui(void)
     lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
     lv_obj_set_scrollable(screen, false);
 
-    box(screen, 24, 20, 42, 42, C_ACCENT, 12);
-    label(screen, "P", 37, 23, &lv_font_montserrat_28, C_BG);
-    label(screen, "PEDAL / LAB", 80, 25, &lv_font_montserrat_20, C_TEXT);
+    lv_obj_t *logo = box(screen, 24, 20, 42, 42, C_ACCENT, 12);
+    static const lv_point_precise_t waveform[] = {{7, 22}, {13, 22}, {17, 11}, {23, 31}, {28, 18}, {35, 18}};
+    lv_obj_t *wave = lv_line_create(logo);
+    lv_line_set_points(wave, waveform, 6);
+    lv_obj_set_style_line_color(wave, color(C_BG), 0);
+    lv_obj_set_style_line_width(wave, 3, 0);
+    lv_obj_set_style_line_rounded(wave, true, 0);
+    label(screen, "RIFFLINE", 80, 22, &lv_font_montserrat_20, C_TEXT);
+    label(screen, "YOUR TONE, CONNECTED", 80, 47, &lv_font_montserrat_12, C_MUTED);
+    lv_obj_t *tuner_button = box(screen, 494, 20, 96, 42, C_TILE, 10);
+    lv_obj_set_clickable(tuner_button, true);
+    lv_obj_add_event_cb(tuner_button, tuner_open, LV_EVENT_CLICKED, NULL);
+    button_label(tuner_button, "TUNER", &lv_font_montserrat_14, C_ACCENT);
     lv_obj_t *audio_button = box(screen, 602, 20, 96, 42, C_TILE, 10);
     lv_obj_set_clickable(audio_button, true);
     lv_obj_add_event_cb(audio_button, audio_open, LV_EVENT_CLICKED, NULL);
-    label(audio_button, "AUDIO", 16, 12, &lv_font_montserrat_14, C_ACCENT);
+    button_label(audio_button, "AUDIO", &lv_font_montserrat_14, C_ACCENT);
     lv_obj_t *exit_button = box(screen, 710, 20, 66, 42, C_TILE, 10);
     lv_obj_set_clickable(exit_button, true);
     lv_obj_add_event_cb(exit_button, exit_clicked, LV_EVENT_CLICKED, NULL);
-    label(exit_button, "EXIT", 12, 12, &lv_font_montserrat_14, C_TEXT);
+    button_label(exit_button, "EXIT", &lv_font_montserrat_14, C_TEXT);
     box(screen, 24, 75, 752, 1, C_LINE, 0);
 
     box(screen, 24, 90, 752, 229, C_CARD, 20);
     label(screen, "01  /  PEDAL BOARD", 47, 108, &lv_font_montserrat_14, C_ACCENT);
     path_label = label(screen, "INPUT  >  OVERDRIVE  >  OUTPUT", 47, 133, &lv_font_montserrat_14, C_MUTED);
     lv_obj_set_width(path_label, 706);
+    lv_obj_set_height(path_label, 18);
     lv_label_set_long_mode(path_label, LV_LABEL_LONG_DOT);
     box(screen, 98, 216, 602, 3, C_LINE, 2);
-    box(screen, 46, 185, 76, 65, C_TILE, 13);
-    label(screen, "IN", 69, 203, &lv_font_montserrat_20, C_ACCENT);
-    box(screen, 681, 185, 70, 65, C_TILE, 13);
-    label(screen, "OUT", 689, 203, &lv_font_montserrat_20, C_ACCENT);
+    input_port = box(screen, 46, 185, 76, 65, C_TILE, 13);
+    button_label(input_port, "IN", &lv_font_montserrat_20, C_ACCENT);
+    output_port = box(screen, 681, 185, 70, 65, C_TILE, 13);
+    button_label(output_port, "OUT", &lv_font_montserrat_20, C_ACCENT);
     label(screen, "DRAG TO REORDER  /  DRAG DOWN TO REMOVE", 47, 283, &lv_font_montserrat_14, C_MUTED);
 
     box(screen, 24, 332, 521, 124, C_CARD, 18);
@@ -660,13 +795,12 @@ static void build_ui(void)
     lv_obj_t * library_button = box(screen, 47, 373, 473, 61, C_TILE, 12);
     lv_obj_set_clickable(library_button, true);
     lv_obj_add_event_cb(library_button, library_open, LV_EVENT_CLICKED, NULL);
-    label(library_button, "OPEN LIBRARY  +", 18, 15, &lv_font_montserrat_20, C_ACCENT);
+    button_label(library_button, "OPEN LIBRARY  +", &lv_font_montserrat_20, C_ACCENT);
     box(screen, 560, 332, 216, 124, C_CARD, 18);
     mode_button = box(screen, 575, 344, 186, 47, C_ACCENT, 11);
     lv_obj_set_clickable(mode_button, true);
     lv_obj_add_event_cb(mode_button, mode_clicked, LV_EVENT_CLICKED, NULL);
-    mode_button_label = label(mode_button, "SIGNAL ON", 0, 0, &lv_font_montserrat_20, C_BG);
-    lv_obj_center(mode_button_label);
+    mode_button_label = button_label(mode_button, "SIGNAL ON", &lv_font_montserrat_20, C_BG);
     amount_label = label(screen, "MIX  65%", 577, 401, &lv_font_montserrat_14, C_MUTED);
     slider = lv_slider_create(screen);
     lv_obj_set_pos(slider, 578, 432);
@@ -691,7 +825,8 @@ static void build_ui(void)
         lv_obj_add_event_cb(tiles[pedal], tile_event, LV_EVENT_PRESSING, (void *)(intptr_t)pedal);
         lv_obj_add_event_cb(tiles[pedal], tile_event, LV_EVENT_RELEASED, (void *)(intptr_t)pedal);
         box(tiles[pedal], 0, 0, 6, 100, pedal_colors[pedal], 3);
-        label(tiles[pedal], pedal_titles[pedal], 8, 36, &lv_font_montserrat_14, C_TEXT);
+        tile_titles[pedal] = label(tiles[pedal], pedal_titles[pedal], 8, 36, &lv_font_montserrat_14, C_TEXT);
+        lv_label_set_long_mode(tile_titles[pedal], LV_LABEL_LONG_DOT);
         tile_details[pedal] = label(tiles[pedal], pedal_details[pedal], 8, 68, &lv_font_montserrat_14, C_MUTED);
         lv_label_set_long_mode(tile_details[pedal], LV_LABEL_LONG_DOT);
         lv_obj_set_height(tile_details[pedal], 18);
@@ -721,12 +856,14 @@ int main(int argc, char ** argv)
     bool fullscreen = false;
     bool self_test = false;
     bool show_audio = false;
+    bool show_tuner = false;
     for(int i = 1; i < argc; ++i) {
         if(strcmp(argv[i], "--live") == 0) live_mode = true;
         else if(strcmp(argv[i], "--fullscreen") == 0) fullscreen = true;
         else if(strcmp(argv[i], "--self-test") == 0) self_test = true;
         else if(strcmp(argv[i], "--audio-settings") == 0) show_audio = true;
-        else { fprintf(stderr, "Usage: %s [--live] [--fullscreen] [--audio-settings]\n", argv[0]); return 2; }
+        else if(strcmp(argv[i], "--tuner") == 0) show_tuner = true;
+        else { fprintf(stderr, "Usage: %s [--live] [--fullscreen] [--audio-settings | --tuner]\n", argv[0]); return 2; }
     }
     lv_init();
     lv_display_t * display = lv_sdl_window_create(WIDTH, HEIGHT);
@@ -734,16 +871,18 @@ int main(int argc, char ** argv)
         fprintf(stderr, "Could not open an SDL window. Is a graphical desktop running?\n");
         return 1;
     }
-    lv_sdl_window_set_title(display, "Pedal / Lab — LVGL pedal board");
+    lv_sdl_window_set_title(display, "Riffline — Guitar pedal board");
     if(fullscreen && SDL_SetWindowFullscreen(lv_sdl_window_get_window(display), SDL_WINDOW_FULLSCREEN_DESKTOP) != 0) {
         fprintf(stderr, "Fullscreen: %s\n", SDL_GetError()); return 1;
     }
     lv_sdl_mouse_create();
     lv_sdl_keyboard_create();
     build_ui();
+    if(live_mode) refresh_state(NULL);
     if(show_audio) audio_open(NULL);
+    else if(show_tuner) tuner_open(NULL);
+    lv_timer_create(tuner_tick, 200, NULL);
     if(live_mode) {
-        refresh_state(NULL);
         lv_timer_create(refresh_state, 1000, NULL);
     }
     if(self_test) {
@@ -767,7 +906,27 @@ int main(int argc, char ** argv)
         if(!read_state() || settings[OCTAVE][PITCH] != .5f) return 7;
         config_close(NULL);
         lv_timer_handler();
-        puts("Native six-pedal layout, bypass button and octave controls passed.");
+        lv_obj_send_event(gear_buttons[LIMITER], LV_EVENT_CLICKED, NULL);
+        lv_slider_set_value(config_sliders[CEILING], -6, LV_ANIM_OFF);
+        lv_obj_send_event(config_sliders[CEILING], LV_EVENT_VALUE_CHANGED, NULL);
+        lv_obj_send_event(config_sliders[CEILING], LV_EVENT_RELEASED, NULL);
+        if(!read_state() || settings[LIMITER][CEILING] != -6.0f) return 8;
+        config_close(NULL);
+        lv_timer_handler();
+        tuner_open(NULL);
+        bool original_tracking = tuner_enabled;
+        tuner_toggle(NULL);
+        if(tuner_enabled == original_tracking) return 9;
+        tuner_toggle(NULL);
+        if(tuner_enabled != original_tracking || active_count != PEDAL_COUNT) return 10;
+        tuner_has_note = true;
+        strcpy(tuner_note, "A4"); tuner_frequency = 440; tuner_cents = 0;
+        tuner_render(true);
+        lv_obj_update_layout(lv_screen_active());
+        if(strcmp(lv_label_get_text(tuner_note_label), "A4") != 0 || lv_obj_get_x(tuner_needle) != 268) return 11;
+        tuner_close(NULL);
+        lv_timer_handler();
+        puts("Native seven-pedal layout, bypass, octave, limiter and tuner controls passed.");
         lv_deinit();
         return 0;
     }

@@ -14,25 +14,27 @@ preview=false
 fullscreen=true
 check=false
 show_audio=false
+show_tuner=false
 for argument in "$@"; do
     case "$argument" in
         --preview) preview=true ;;
         --windowed) fullscreen=false ;;
         --check) check=true ;;
         --audio-settings) show_audio=true ;;
-        *) echo "Usage: $0 [--preview] [--windowed] [--check] [--audio-settings]" >&2; exit 2 ;;
+        --tuner) show_tuner=true ;;
+        *) echo "Usage: $0 [--preview] [--windowed] [--check] [--audio-settings | --tuner]" >&2; exit 2 ;;
     esac
 done
 fail() {
     echo "$*" >&2
     if ! $check; then
-        if command -v zenity >/dev/null; then zenity --error --title='Guitar Pedal' --text="$*" || true
-        elif command -v notify-send >/dev/null; then notify-send -u critical 'Guitar Pedal' "$*" || true; fi
+        if command -v zenity >/dev/null; then zenity --error --title='Riffline' --text="$*" || true
+        elif command -v notify-send >/dev/null; then notify-send -u critical 'Riffline' "$*" || true; fi
     fi
     exit 1
 }
 if ! $check; then
-    [[ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}${SDL_VIDEODRIVER:-}" ]] || fail 'Open Guitar Pedal from the Pi desktop.'
+    [[ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}${SDL_VIDEODRIVER:-}" ]] || fail 'Open Riffline from the Pi desktop.'
 fi
 exec 9>"$cache/launcher.lock"
 flock -n 9 || exit 0
@@ -82,4 +84,5 @@ if ! $preview; then
 fi
 if $fullscreen; then arguments+=(--fullscreen); fi
 if $show_audio; then arguments+=(--audio-settings); fi
+if $show_tuner && ! $show_audio; then arguments+=(--tuner); fi
 "$ui" "${arguments[@]}" 9>&- || fail "Native UI could not open. Details: $cache/launcher.log"

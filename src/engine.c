@@ -114,6 +114,7 @@ static json_object *settings(const Pedal *pedal)
     if(pedal->kind == DELAY) { SET(time); SET(feedback); SET(mix); }
     if(pedal->kind == TREMOLO) { SET(rate); SET(depth); }
     if(pedal->kind == CHORUS) { SET(rate); SET(depth); SET(mix); }
+    if(pedal->kind == LIMITER) { SET(ceiling); SET(release); }
     if(strcmp(pedal->id, "octave") == 0) { SET(mix); }
 #undef SET
     if(pedal->kind == LV2)
@@ -200,7 +201,7 @@ static json_object *lv2_listing(Engine *engine)
         json_object_object_add(entry, "name", json_object_new_string(name ? lilv_node_as_string(name) : uri));
         if(name) lilv_node_free(name);
         const char *loaded = NULL;
-        for(size_t i = 5; i < engine->pedal_count; ++i)
+        for(size_t i = BUILTIN_COUNT; i < engine->pedal_count; ++i)
             if(strcmp(engine->pedals[i].uri, uri) == 0) loaded = engine->pedals[i].id;
         json_object_object_add(entry, "loaded_as", loaded ? json_object_new_string(loaded) : NULL);
         json_object_array_add(plugins, entry);

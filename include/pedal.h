@@ -7,13 +7,14 @@
 #include <stdint.h>
 #include "tuner.h"
 
-#define MAX_PEDALS 37
+#define MAX_PEDALS 38
 #define MAX_ACTIVE 32
 #define MAX_PORTS 128
 #define MAX_BLOCK 8192
 #define OCTAVE_URI "urn:pipedal:octave"
 
-typedef enum { OVERDRIVE, FUZZ, DELAY, TREMOLO, CHORUS, LV2 } PedalKind;
+typedef enum { OVERDRIVE, FUZZ, DELAY, TREMOLO, CHORUS, LIMITER, LV2 } PedalKind;
+#define BUILTIN_COUNT ((size_t)LV2)
 
 typedef struct {
     uint32_t index;
@@ -34,6 +35,7 @@ typedef struct {
     char name[256];
     char uri[2048];
     double drive, tone, mix, level, time, feedback, rate, depth;
+    double ceiling, release, limiter_gain;
     double alpha, filter, phase;
     float *ring;
     size_t ring_size, position;

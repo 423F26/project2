@@ -3,12 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Guitar Pedal Board</title>
+<title>Riffline · Guitar pedal board</title>
 <style>
   :root { color-scheme: dark; font-family: system-ui, sans-serif; }
   body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #11171c; color: #eef5f3; }
   main { box-sizing: border-box; width: min(1200px, calc(100% - 32px)); padding: 20px 24px; border: 1px solid #34444b; border-radius: 20px; background: #1d282e; box-shadow: 0 20px 60px #0005; display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 320px); grid-template-areas: "title toggle" "subtitle toggle" "path path" "board board" "mix tuner" "status status"; column-gap: 24px; align-items: start; }
-  h1 { grid-area: title; }
+  h1 { grid-area: title; display: flex; align-items: center; gap: 12px; }
+  .brand-mark { width: 36px; height: 36px; flex: none; }
   main > p:first-of-type { grid-area: subtitle; }
   #toggle { grid-area: toggle; }
   #path { grid-area: path; }
@@ -74,7 +75,7 @@
   .board-heading { margin-bottom: 12px; }
   .board-heading h2, .library-heading h2 { margin: 0; }
   .board-actions { display: flex; gap: 8px; }
-  #audio-open { width: auto; min-height: 44px; padding: 0 16px; border-radius: 10px; font-size: 1rem; background: #34444b; color: #eef5f3; }
+  #audio-open, #tuner-open { width: auto; min-height: 44px; padding: 0 16px; border-radius: 10px; font-size: 1rem; background: #34444b; color: #eef5f3; }
   #audio-dialog { box-sizing: border-box; width: min(580px, calc(100% - 32px)); max-height: calc(100dvh - 24px); overflow-y: auto; }
   #audio-dialog input[type=range] { min-height: 36px; }
   #audio-dialog p { margin: 0 0 6px; }
@@ -164,7 +165,7 @@
 </head>
 <body>
 <main>
-  <h1>Guitar Pedal Board</h1>
+  <h1><svg class="brand-mark" viewBox="0 0 42 42" aria-hidden="true"><rect width="42" height="42" rx="12" fill="#43e0a0"/><path d="M7 22h6l4-11 6 20 5-13h7" fill="none" stroke="#0a1016" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>Riffline</h1>
   <p>Build the signal path from input to output</p>
   <button id="toggle" type="button" aria-pressed="true">Signal ON</button>
   <p id="path" class="path">INPUT → OVERDRIVE → OUTPUT</p>
@@ -172,6 +173,7 @@
     <div class="board-heading">
       <h2>Active board</h2>
       <div class="board-actions">
+        <button id="tuner-open" type="button" aria-expanded="false" aria-controls="tuner-panel">Tuner</button>
         <button id="audio-open" type="button" aria-haspopup="dialog" aria-controls="audio-dialog">Audio</button>
         <button id="add-pedal" type="button" aria-haspopup="dialog" aria-controls="library-dialog">+ Add pedal</button>
       </div>
@@ -265,6 +267,7 @@ const pedalLooks = {
   delay: {color: '#80b9ff', kind: 'Time'},
   tremolo: {color: '#d5a2ff', kind: 'Modulation'},
   chorus: {color: '#89e1d3', kind: 'Modulation'},
+  limiter: {color: '#f5cb77', kind: 'Dynamics'},
   octave: {color: '#b9b0ff', kind: 'Pitch'}
 };
 function lookFor(name) { return pedalLooks[name] || {color: '#ed9eb0', kind: 'LV2 effect'}; }
@@ -416,7 +419,7 @@ function renderLibrary() {
   const query = search.value.trim().toLowerCase();
   const matching = Object.entries(available).filter(([name, info]) =>
     `${name} ${info.name}`.toLowerCase().includes(query));
-  const visible = query || libraryExpanded ? matching : matching.slice(0, 6);
+  const visible = query || libraryExpanded ? matching : matching.slice(0, 7);
   for (const [name, info] of visible) {
     const active = pedals.includes(name);
     const look = lookFor(name);
@@ -431,7 +434,7 @@ function renderLibrary() {
     button.replaceChildren(label, kind);
     library.append(button);
   }
-  showMore.hidden = !!query || matching.length <= 6;
+  showMore.hidden = !!query || matching.length <= 7;
   showMore.textContent = libraryExpanded ? 'Show fewer' : `Show all ${matching.length} pedals`;
 }
 document.getElementById('add-pedal').addEventListener('click', () => libraryDialog.showModal());
@@ -554,17 +557,27 @@ tunerToggle.addEventListener('click', async () => {
   try { await request('/api/tuner', {enabled: !tunerEnabled}); }
   catch (error) { status.textContent = error.message; }
 });
+const tunerPanel = document.getElementById('tuner-panel');
+const tunerOpen = document.getElementById('tuner-open');
+tunerOpen.addEventListener('click', () => { tunerPanel.open = !tunerPanel.open; });
+tunerPanel.addEventListener('toggle', () => { tunerOpen.setAttribute('aria-expanded', String(tunerPanel.open)); });
 const specs = {
   overdrive: [['drive', 1, 100, 1], ['tone', 100, 8000, 1], ['mix', 0, 1, .01], ['level', 0, 1, .01]],
   fuzz: [['drive', 1, 100, 1], ['tone', 100, 8000, 1], ['level', 0, 1, .01]],
   delay: [['time', 20, 1500, 1], ['feedback', 0, .9, .01], ['mix', 0, 1, .01]],
   tremolo: [['rate', .1, 20, .1], ['depth', 0, 1, .01]],
   chorus: [['rate', .1, 5, .1], ['depth', 0, 1, .01], ['mix', 0, 1, .01]],
+  limiter: [['ceiling', -36, 0, 1, 'Ceiling (dBFS)'], ['release', 5, 1000, 1, 'Release (ms)']],
   octave: [['pitch', .5, 2, .5, 'Octave'], ['mix', 0, 1, .01, 'Octave blend']]
 };
 function openConfig(name) {
   configTitle.textContent = `${available[name].name} settings`;
   configFields.replaceChildren();
+  if (name === 'limiter') {
+    const hint = document.createElement('p');
+    hint.textContent = 'Instant attack, no lookahead delay. Place last for peak control. Limiting does not remove background hum.';
+    configFields.append(hint);
+  }
   const fields = specs[name] || Object.entries(available[name].ranges).map(([key, range]) =>
     [key, range.min ?? 0, range.max ?? 100, .01]);
   for (const [key, min, max, step, title] of fields) {

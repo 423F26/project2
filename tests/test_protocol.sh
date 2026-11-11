@@ -20,6 +20,10 @@ engine_pid=$!
 for i in {1..100}; do [[ -S $PEDAL_CONTROL_SOCKET ]] && break; sleep .02; done
 [[ -S $PEDAL_CONTROL_SOCKET ]]
 "$control" state | jq -e '.pedals == ["overdrive"] and .enabled == true'
+"$control" board limiter | jq -e '.pedals == ["limiter"] and .settings.limiter.ceiling == -1'
+"$control" config limiter ceiling -6 | jq -e '.settings.limiter.ceiling == -6'
+"$control" config limiter release 120 | jq -e '.settings.limiter.release == 120'
+if "$control" config limiter ceiling 1 >"$tmp/invalid" 2>&1; then exit 1; fi
 "$control" board fuzz,delay | jq -e '.pedals == ["fuzz","delay"]'
 "$control" config delay time 450 | jq -e '.settings.delay.time == 450'
 "$control" bypass fuzz on | jq -e '.available.fuzz.bypassed == true and .pedals == ["fuzz","delay"]'
@@ -54,6 +58,7 @@ jq -e '.pedals == []' "$tmp/state"
 curl -fsS "http://127.0.0.1:$port/" >"$tmp/page"
 grep -q 'Import effect' "$tmp/page"
 curl -fsS "http://127.0.0.1:$port/api/audio" | jq -e '.available | type == "boolean"'
+curl -fsS -H 'Content-Type: application/json' -d '{"pedal":"limiter","setting":"ceiling","value":-3}' "http://127.0.0.1:$port/api/config" | jq -e '.settings.limiter.ceiling == -3'
 for payload in '{}' '{"volume_db":1}' '{"volume_db":"0"}' '{"muted":1}' '{"mic_bias":true}' '{"register":2}'; do
   code=$(curl -sS -o "$tmp/rejected" -w '%{http_code}' -H 'Content-Type: application/json' -d "$payload" "http://127.0.0.1:$port/api/audio")
   [[ $code == 400 ]]

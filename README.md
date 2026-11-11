@@ -1,12 +1,12 @@
-# ML Guitar Pedal — C runtime
+# Riffline — Guitar pedal board
 
-A C guitar pedal engine with a dynamic serial board, five built-in effects, LV2 effect loading, a browser control panel, a tuner with internal MIDI note events, and a GPIO footswitch adapter. The built-in effects are Overdrive, Fuzz, Delay, Tremolo, and Chorus. The board grows with the pedals you activate.
+A C guitar pedal engine with a dynamic serial board, six built-in effects, LV2 effect loading, a browser control panel, a tuner with internal MIDI note events, and a GPIO footswitch adapter. The built-in effects are Overdrive, Fuzz, Delay, Tremolo, Chorus, and Limiter. The bundled Octave plugin adds pitch shifting. The board grows with the pedals you activate.
 
 This C runtime is the foundation for the ML guitar pedal. It does not load an ML model yet. The plan is to keep audio processing predictable, then add learned playing-gesture and tone controls alongside it. See the [ML roadmap](docs/dev/ml-roadmap.md).
 
 ## Project status
 
-The C engine, five built-in effects, serial board controls, browser panel, LV2 import path, tuner, and internal MIDI event queue are implemented. The automated tests cover DSP, tuner, LV2 processing with a local test plugin, and the local command and HTTP protocols. Raspberry Pi audio, GPIO footswitch wiring, touchscreen deployment, latency, and the current ADAC board still need device-level validation. Presets and ML inference are planned work. See the [agile progress tracker](docs/agile/README.md) for acceptance status and upcoming work.
+The C engine, six built-in effects, serial board controls, browser panel, LV2 import path, tuner, and internal MIDI event queue are implemented. The automated tests cover DSP, tuner, LV2 processing with a local test plugin, and the local command and HTTP protocols. The Pi desktop launcher, ADAC capture/playback, hardware mixer controls, and session restore have been checked on the connected Pi. GPIO footswitch wiring and analogue round-trip latency still need device-level validation. ML inference remains planned work. See the [agile progress tracker](docs/agile/README.md) for acceptance status and upcoming work.
 
 The runtime is in `src/` and `include/`, its tests in `tests/`, and the current KiCad project in `HW/piADAC/`. `HW/production/` holds an earlier fabrication export; use the current files under `HW/piADAC/production/` for the latest board revision.
 
@@ -40,7 +40,7 @@ On the ADAC-equipped Pi, install the native desktop shortcut and launch on boot:
 ./scripts/install-pi-desktop.sh --autostart
 ```
 
-Run this as the desktop user. With desktop automatic login enabled, **Guitar Pedal** opens fullscreen after boot. The desktop shortcut and boot entry both run `run-pedal.sh`, which incrementally builds the current engine, bundled octave plugin, and native UI before launching. It selects the ADAC interface by ALSA card name and restores the previous pedal settings. Closing the UI saves those settings and stops its audio engine. See [Pi setup](HW/piADAC/RASPBERRY_PI_SETUP.md) for the hardware configuration and build dependencies in the [native UI guide](lvgl_ui/README.md).
+Run this as the desktop user. With desktop automatic login enabled, **Riffline** opens fullscreen after boot. The desktop shortcut and boot entry both run `run-pedal.sh`, which incrementally builds the current engine, bundled octave plugin, and native UI before launching. It selects the ADAC interface by ALSA card name and restores the previous pedal settings. Closing the UI saves those settings and stops its audio engine. See [Pi setup](HW/piADAC/RASPBERRY_PI_SETUP.md) for the hardware configuration and build dependencies in the [native UI guide](lvgl_ui/README.md).
 
 Use **AUDIO** in the native UI or **Audio** in the browser for ADAC output volume,
 mute, and input gain. These hardware levels are separate from pedal mix/levels,

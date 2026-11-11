@@ -65,7 +65,7 @@ bool lv2_load(Engine *engine, const char *uri, char *error, size_t error_size)
         snprintf(error, error_size, "invalid LV2 URI");
         return false;
     }
-    for(size_t i = 5; i < engine->pedal_count; ++i)
+    for(size_t i = BUILTIN_COUNT; i < engine->pedal_count; ++i)
         if(strcmp(engine->pedals[i].uri, uri) == 0) return true;
     if(engine->pedal_count == MAX_PEDALS) {
         snprintf(error, error_size, "pedal library is full");
@@ -101,7 +101,7 @@ bool lv2_load(Engine *engine, const char *uri, char *error, size_t error_size)
         pedal->mix = .65;
     } else {
         size_t serial = 1;
-        for(size_t i = 5; i < engine->pedal_count; ++i)
+        for(size_t i = BUILTIN_COUNT; i < engine->pedal_count; ++i)
             if(strncmp(engine->pedals[i].id, "lv2-", 4) == 0) serial++;
         snprintf(pedal->id, sizeof(pedal->id), "lv2-%zu", serial);
     }

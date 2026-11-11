@@ -16,8 +16,8 @@ static int16_t pcm16(double value)
 
 static void defaults(Pedal *pedal, PedalKind kind, int rate)
 {
-    static const char *ids[] = {"overdrive", "fuzz", "delay", "tremolo", "chorus"};
-    static const char *names[] = {"Overdrive", "Fuzz", "Delay", "Tremolo", "Chorus"};
+    static const char *ids[] = {"overdrive", "fuzz", "delay", "tremolo", "chorus", "limiter"};
+    static const char *names[] = {"Overdrive", "Fuzz", "Delay", "Tremolo", "Chorus", "Limiter"};
     memset(pedal, 0, sizeof(*pedal));
     pedal->kind = kind;
     pedal->sample_rate = rate;
@@ -37,11 +37,15 @@ static void defaults(Pedal *pedal, PedalKind kind, int rate)
     } else if(kind == TREMOLO) {
         pedal->rate = 5;
         pedal->depth = .7;
-    } else {
+    } else if(kind == CHORUS) {
         pedal->rate = 1.2;
         pedal->depth = .5;
         pedal->mix = .5;
         pedal->ring_size = (size_t)lround(rate * .06);
+    } else if(kind == LIMITER) {
+        pedal->ceiling = -1;
+        pedal->release = 80;
+        pedal->limiter_gain = 1;
     }
     if(pedal->ring_size) pedal->ring = calloc(pedal->ring_size, sizeof(float));
 }
@@ -57,8 +61,8 @@ bool engine_init(Engine *engine, int rate, size_t block, double clean_level)
     engine->amount = engine->wet = engine->target = 1;
     engine->enabled = true;
     engine->fade_samples = (size_t)rate / 100;
-    engine->pedal_count = 5;
-    for(size_t i = 0; i < 5; ++i) {
+    engine->pedal_count = BUILTIN_COUNT;
+    for(size_t i = 0; i < BUILTIN_COUNT; ++i) {
         defaults(&engine->pedals[i], (PedalKind)i, rate);
         if(engine->pedals[i].ring_size && !engine->pedals[i].ring) {
             engine_free(engine);
@@ -180,6 +184,10 @@ static bool builtin_parameter(Pedal *pedal, const char *name, double value, int 
         *field = &pedal->rate; minimum = .1; maximum = pedal->kind == TREMOLO ? 20 : 5;
     } else if(strcmp(name, "depth") == 0 && (pedal->kind == TREMOLO || pedal->kind == CHORUS)) {
         *field = &pedal->depth;
+    } else if(strcmp(name, "ceiling") == 0 && pedal->kind == LIMITER) {
+        *field = &pedal->ceiling; minimum = -36; maximum = 0;
+    } else if(strcmp(name, "release") == 0 && pedal->kind == LIMITER) {
+        *field = &pedal->release; minimum = 5; maximum = 1000;
     } else return false;
     return isfinite(value) && value >= minimum && value <= maximum;
 }
@@ -212,6 +220,8 @@ static void process_builtin(Engine *engine, Pedal *pedal, const int16_t *input, 
 {
     const size_t size = pedal->ring_size;
     const double normalization = pedal->kind == OVERDRIVE ? tanh(pedal->drive) : 1;
+    const double ceiling = pedal->kind == LIMITER ? pow(10, pedal->ceiling / 20) : 1;
+    const double release = pedal->kind == LIMITER ? exp(-1000 / (pedal->release * engine->rate)) : 0;
     size_t delay_samples = 0;
     if(pedal->kind == DELAY) {
         delay_samples = (size_t)lround(pedal->time * engine->rate / 1000);
@@ -258,6 +268,15 @@ static void process_builtin(Engine *engine, Pedal *pedal, const int16_t *input, 
             pedal->ring[pedal->position] = dry;
             pedal->position = (pedal->position + 1) % size;
             pedal->phase = fmod(pedal->phase + pedal->rate / engine->rate, 1);
+            break;
+        }
+        case LIMITER: {
+            // Instant attack catches the current sample; release adds no buffering.
+            double peak = fabs(dry);
+            double target = peak > ceiling ? ceiling / peak : 1;
+            if(target < pedal->limiter_gain) pedal->limiter_gain = target;
+            else pedal->limiter_gain = target + release * (pedal->limiter_gain - target);
+            result = fmax(-ceiling, fmin(ceiling, dry * pedal->limiter_gain));
             break;
         }
         case LV2: break;

@@ -9,7 +9,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "build" / "docs-source"
 PUBLISHED_SUFFIXES = {
-    ".md", ".html", ".pdf", ".xlsx", ".png",
+    ".md", ".html", ".pdf", ".xlsx", ".png", ".svg",
     ".kicad_sch", ".kicad_pcb", ".step", ".stp",
 }
 

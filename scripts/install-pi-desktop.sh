@@ -25,6 +25,7 @@ escaped = ''.join('\\' + c if c in '\\"`$' else c for c in executable)
 escaped = escaped.replace('\\', '\\\\').replace('%', '%%')
 text = '\n'.join(
     'Exec="' + escaped + '"' if line.startswith('Exec=') else
+    'Icon=' + str(root / 'assets/riffline.svg').replace('\\', '\\\\') if line.startswith('Icon=') else
     'Path=' + str(root).replace('\\', '\\\\') if line.startswith('Path=') else line
     for line in text.splitlines()
 ) + '\n'
