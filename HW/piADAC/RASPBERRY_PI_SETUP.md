@@ -152,8 +152,10 @@ outputs; these connections must remain consistent with its design.
 - Audio settings were exercised against the actual ADAC mixer through the HTTP
   API, including level, input gain, mute, rejected unsupported controls, and saved
   settings. The browser slider was checked against the physical mixer value.
-- With the two-period startup threshold, runtime reports show approximately
-  4.8–5 ms of queued playback audio. This excludes converter and effect delay.
+- With the two-period startup threshold, runtime samples showed approximately
+  4.8–7.4 ms of queued playback audio as scheduling and capture queue depth varied.
+  These snapshots exclude converter and effect delay; the startup threshold is
+  5.33 ms, not an analogue round-trip measurement.
 
 These checks establish driver binding and digital streaming, not analogue
 input/output quality, measured latency, or electrical validation of the assembled
