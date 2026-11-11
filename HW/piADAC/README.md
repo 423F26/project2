@@ -13,6 +13,9 @@ It features:
 
 This design is inspired in the [Hifiberry](https://hifiberry.com) soundcards.
 
+See [Raspberry Pi setup and verification](RASPBERRY_PI_SETUP.md) for the
+HiFiBerry overlay, GPIO mapping, mixer settings, and device checks.
+
 [![Creative Commons Attribution-ShareAlike 4.0 International License](https://upload.wikimedia.org/wikipedia/commons/f/f3/CC-BY-SA_3_icon_88x31.png)](
 http://creativecommons.org/licenses/by-sa/4.0/)
 This work is licensed under a [Creative Commons Attribution-ShareAlike 4.0 International License](http://creativecommons.org/licenses/by-sa/4.0/)

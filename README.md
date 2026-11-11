@@ -34,6 +34,17 @@ Open the localhost URL printed by MkDocs. On every push, GitHub Actions builds t
 
 ## Run
 
+To start the browser panel and engine together, use one of these scripts from any directory. Both open the panel at `http://127.0.0.1:8765`; press Ctrl+C to stop both processes. Set `PEDAL_WEB_PORT` if port 8765 is occupied.
+
+```sh
+./run-without-audio.sh
+./run-with-audio.sh --input plughw:1,0 --output plughw:1,0
+```
+
+The first command is a control demo that needs no audio interface. The second processes live audio; replace the ALSA device names with your interface, or omit `--input` and `--output` to use the first detected capture and playback devices. Use `./build/release/pedal-engine --list-devices` to see available devices. The scripts build the C programs if needed.
+
+You can also start each process separately:
+
 ```sh
 ./build/release/pedal-engine --list-devices
 ./build/release/pedal-engine --input plughw:1,0 --output plughw:1,0
