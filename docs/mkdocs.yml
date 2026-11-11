@@ -24,4 +24,5 @@ nav:
   - Hardware:
       - Hardware files: docs/hardware.md
       - ZynADAC: HW/piADAC/README.md
+      - Raspberry Pi setup: HW/piADAC/RASPBERRY_PI_SETUP.md
   - Agile progress: docs/agile/README.md

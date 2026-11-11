@@ -3,10 +3,8 @@ set -euo pipefail
 
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 build_dir="$root/build/release"
-if [[ ! -x "$build_dir/pedal-engine" || ! -x "$build_dir/pedal-web" ]]; then
-  cmake -S "$root" -B "$build_dir" -DCMAKE_BUILD_TYPE=Release
-  cmake --build "$build_dir" -j 4
-fi
+cmake -S "$root" -B "$build_dir" -DCMAKE_BUILD_TYPE=Release
+cmake --build "$build_dir" --parallel "${PEDAL_BUILD_JOBS:-2}" --target pedal-engine pedal-web
 
 runtime_dir=$(mktemp -d "${TMPDIR:-/tmp}/pedal-demo.XXXXXX")
 engine_pid=

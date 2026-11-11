@@ -34,7 +34,15 @@ Open the localhost URL printed by MkDocs. On every push, GitHub Actions builds t
 
 ## Run
 
-To start the browser panel and engine together, use one of these scripts from any directory. Both open the panel at `http://127.0.0.1:8765`; press Ctrl+C to stop both processes. Set `PEDAL_WEB_PORT` if port 8765 is occupied.
+On the ADAC-equipped Pi, install the native desktop shortcut and launch on boot:
+
+```sh
+./scripts/install-pi-desktop.sh --autostart
+```
+
+Run this as the desktop user. With desktop automatic login enabled, **Guitar Pedal** opens fullscreen after boot. The desktop shortcut and boot entry both run `run-pedal.sh`, which incrementally builds the current engine, bundled octave plugin, and native UI before launching. It selects the ADAC interface by ALSA card name and restores the previous pedal settings. Closing the UI saves those settings and stops its audio engine. See [Pi setup](HW/piADAC/RASPBERRY_PI_SETUP.md) for the hardware configuration and build dependencies in the [native UI guide](lvgl_ui/README.md).
+
+To start the browser panel and engine together, use one of these scripts from any directory. Both serve the panel at `http://127.0.0.1:8765`; press Ctrl+C to stop both processes. Set `PEDAL_WEB_PORT` if port 8765 is occupied.
 
 ```sh
 ./run-without-audio.sh

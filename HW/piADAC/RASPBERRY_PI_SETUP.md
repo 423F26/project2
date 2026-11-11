@@ -71,8 +71,23 @@ On the Pi, `/home/pi/project2/run-pedal.sh` explicitly selects
 `plughw:CARD=sndrpihifiberry,DEV=0` for input and output, with 48000 Hz,
 128-frame processing blocks, and input/output metering. Open **Guitar Pedal**
 from the desktop to launch the C engine and fullscreen native controls. The
-launcher restores the saved pedal chain; closing its UI stops the engine it
-started. Launching is manual, with no pedal boot service enabled.
+launcher restores the saved pedal chain; closing its UI saves the settings and
+stops the engine it started. It incrementally rebuilds the engine, bundled octave
+plugin, and native UI on each launch, so a source update takes effect on the next
+launch.
+
+Boot launch is installed for the `pi` desktop user with:
+
+```sh
+./scripts/install-pi-desktop.sh --autostart
+```
+
+This installs the shortcut in `~/Desktop/Guitar Pedal.desktop`, the applications
+menu entry in `~/.local/share/applications/guitar-pedal.desktop`, and the login
+entry in `~/.config/autostart/guitar-pedal.desktop`. All point at the same checkout's
+`run-pedal.sh`. Raspberry Pi OS's labwc desktop runs XDG autostart entries; with
+desktop automatic login configured, this starts the pedal after boot. The
+launcher waits up to 30 seconds for ADAC and prevents duplicate instances.
 
 The engine processes mono audio. ALSA's `plughw` conversion handles the board's
 stereo hardware stream. The configured runtime was checked with both hardware

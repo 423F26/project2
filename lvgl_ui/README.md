@@ -2,6 +2,14 @@
 
 This native 800×480 LVGL preview shows the pedal board as an input-to-output signal path. It opens an SDL2 window on a Linux laptop. Mouse drags stand in for touchscreen drags.
 
+On the ADAC-equipped Raspberry Pi, run `./scripts/install-pi-desktop.sh --autostart`
+from the repository root to install **Guitar Pedal** on the desktop and launch it
+after automatic desktop login. Both entries use `run-pedal.sh`, which builds the
+current sources, selects ADAC for capture/playback, restores the saved pedal
+settings, and opens the native UI fullscreen. Escape closes it. Use
+`./run-pedal.sh --preview --windowed` for an audio-free window, or
+`./run-pedal.sh --check` to build and check ADAC without opening the UI.
+
 ## Build and run on a laptop
 
 Install C and C++ compilers, CMake, and SDL2 development files (`libsdl2-dev` on Debian/Raspberry Pi OS). CMake downloads the pinned LVGL v9.6.0 source on the first build.
@@ -24,4 +32,7 @@ On the same machine as `pedal-engine`, start the UI with:
 
 It reads and changes the existing `/run/guitar-effect.sock` control interface. The UI shows **PEDAL DISCONNECTED** if the effect process is unavailable. The audio backend follows the active chain from left to right and crossfades when its order or a pedal setting changes.
 
-Loaded LV2 effects are available through the browser UI and CLI; the native preview shows built-in pedals. The current graph is a serial path: input → active pedals → output. The native view displays up to five built-in pedals; use the browser UI for chains containing LV2 effects or more pedals. This desktop SDL2 build is a preview; Pi touchscreen deployment needs a display and input backend matched to the actual screen hardware.
+The native UI includes the bundled Octave effect and per-pedal bypass controls.
+Other loaded LV2 effects are available through the browser UI and CLI. The graph
+is a serial path: input → active pedals → output. The SDL2 display and touch input
+backend has been deployed on the Pi's graphical desktop.
