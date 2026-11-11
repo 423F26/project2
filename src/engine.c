@@ -2,6 +2,7 @@
 #include "pedal.h"
 
 #include <alsa/asoundlib.h>
+#include <alloca.h>
 #include <errno.h>
 #include <getopt.h>
 #include <json-c/json.h>
@@ -382,6 +383,22 @@ static snd_pcm_t *open_pcm(const char *device, snd_pcm_stream_t stream, int rate
     unsigned latency = (unsigned)fmax(10000, block * 4000000.0 / rate);
     code = snd_pcm_set_params(pcm, SND_PCM_FORMAT_S16_LE, SND_PCM_ACCESS_RW_INTERLEAVED,
                               1, (unsigned)rate, 1, latency);
+    if(code >= 0) {
+        snd_pcm_uframes_t buffer = 0, period = 0;
+        snd_pcm_sw_params_t *software;
+        snd_pcm_sw_params_alloca(&software);
+        code = snd_pcm_get_params(pcm, &buffer, &period);
+        if(code >= 0) code = snd_pcm_sw_params_current(pcm, software);
+        /* Reserve ring capacity for jitter without queuing the whole ring. */
+        snd_pcm_uframes_t start = stream == SND_PCM_STREAM_CAPTURE ? 1 :
+            (snd_pcm_uframes_t)fmin(buffer, fmax(period * 2, block * 2));
+        if(code >= 0) code = snd_pcm_sw_params_set_start_threshold(pcm, software, start);
+        if(code >= 0) code = snd_pcm_sw_params_set_avail_min(pcm, software, period);
+        if(code >= 0) code = snd_pcm_sw_params(pcm, software);
+        if(code >= 0) fprintf(stdout, "ALSA %s: period=%lu buffer=%lu start=%lu frames\n",
+                             stream == SND_PCM_STREAM_CAPTURE ? "capture" : "playback",
+                             (unsigned long)period, (unsigned long)buffer, (unsigned long)start);
+    }
     if(code < 0) {
         fprintf(stderr, "ALSA %s: %s\n", device, snd_strerror(code));
         snd_pcm_close(pcm);
@@ -434,10 +451,14 @@ static bool audio_loop(Engine *engine, const char *input_device, const char *out
             if(frames >= (size_t)engine->rate * 2) {
                 double input_rms = sqrt(squares / frames);
                 double output_rms = sqrt(output_squares / frames);
-                printf("input rms=%.8f peak=%.4f input_dbfs=%.1f output_dbfs=%.1f output_peak=%.4f clipped=%zu capture_recoveries=%u playback_recoveries=%u\n",
+                snd_pcm_sframes_t capture_delay = 0, playback_delay = 0;
+                if(snd_pcm_delay(capture, &capture_delay) < 0) capture_delay = 0;
+                if(snd_pcm_delay(playback, &playback_delay) < 0) playback_delay = 0;
+                printf("input rms=%.8f peak=%.4f input_dbfs=%.1f output_dbfs=%.1f output_peak=%.4f clipped=%zu capture_recoveries=%u playback_recoveries=%u capture_queue_ms=%.2f playback_queue_ms=%.2f\n",
                        input_rms, peak / 32768.0, 20 * log10(fmax(input_rms, 1e-12)),
                        20 * log10(fmax(output_rms, 1e-12)), output_peak / 32768.0,
-                       clipped, capture_recoveries, playback_recoveries);
+                       clipped, capture_recoveries, playback_recoveries,
+                       capture_delay * 1000.0 / engine->rate, playback_delay * 1000.0 / engine->rate);
                 fflush(stdout);
                 frames = 0; squares = 0; output_squares = 0;
                 peak = 0; output_peak = 0; clipped = 0;

@@ -73,6 +73,15 @@
   .board-heading, .library-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .board-heading { margin-bottom: 12px; }
   .board-heading h2, .library-heading h2 { margin: 0; }
+  .board-actions { display: flex; gap: 8px; }
+  #audio-open { width: auto; min-height: 44px; padding: 0 16px; border-radius: 10px; font-size: 1rem; background: #34444b; color: #eef5f3; }
+  #audio-dialog { box-sizing: border-box; width: min(580px, calc(100% - 32px)); max-height: calc(100dvh - 24px); overflow-y: auto; }
+  #audio-dialog input[type=range] { min-height: 36px; }
+  #audio-dialog output { font-variant-numeric: tabular-nums; }
+  #audio-mute { width: auto; min-height: 44px; padding: 0 20px; margin: 8px 0 16px; background: #34444b; color: #eef5f3; }
+  #audio-info, #audio-inputs { font-size: .85rem; line-height: 1.5; }
+  #audio-status { min-height: 1.5em; margin: 10px 0; font-size: .9rem; }
+  #audio-close { margin-top: 10px; background: #34444b; color: #eef5f3; }
   #add-pedal, #library-close { width: auto; min-height: 44px; padding: 0 16px; border-radius: 10px; font-size: 1rem; }
   #library-close { background: #34444b; color: #eef5f3; }
   #library-dialog { box-sizing: border-box; width: min(680px, calc(100% - 32px)); max-height: calc(100dvh - 24px); overflow-y: auto; }
@@ -160,7 +169,10 @@
   <section class="board-panel">
     <div class="board-heading">
       <h2>Active board</h2>
-      <button id="add-pedal" type="button" aria-haspopup="dialog" aria-controls="library-dialog">+ Add pedal</button>
+      <div class="board-actions">
+        <button id="audio-open" type="button" aria-haspopup="dialog" aria-controls="audio-dialog">Audio</button>
+        <button id="add-pedal" type="button" aria-haspopup="dialog" aria-controls="library-dialog">+ Add pedal</button>
+      </div>
     </div>
     <div id="board" class="board"></div>
   </section>
@@ -190,6 +202,18 @@
   </div>
   <div id="pedal-library" class="library"></div>
   <button id="show-more" class="more" type="button" hidden>Show all pedals</button>
+</dialog>
+<dialog id="audio-dialog" aria-labelledby="audio-title">
+  <h2 id="audio-title">Audio · HiFiBerry / ADAC</h2>
+  <p>Hardware levels before and after the pedal chain.</p>
+  <div class="setting"><label for="audio-volume">Output level <output id="audio-volume-value">— dB</output></label>
+    <input id="audio-volume" type="range" min="-60" max="0" step="1" value="-12" disabled></div>
+  <div class="setting"><label for="audio-gain">Input gain <output id="audio-gain-value">— dB</output></label>
+    <input id="audio-gain" type="range" min="-12" max="32" step="1" value="0" disabled></div>
+  <button id="audio-mute" type="button" aria-pressed="false" disabled>Mute output</button>
+  <p id="audio-info"></p><p id="audio-inputs"></p>
+  <p id="audio-status" role="status">Reading interface…</p>
+  <button id="audio-close" type="button">Close</button>
 </dialog>
 <dialog id="config"><h2 id="config-title"></h2><div id="config-fields"></div><button id="config-close" type="button">Close</button></dialog>
 <dialog id="import-dialog"><h2>Import LV2 effect</h2>
@@ -466,6 +490,56 @@ async function request(path, data) {
   if (!response.ok) throw new Error(payload.error || 'Connection failed');
   render(payload);
 }
+const audioDialog = document.getElementById('audio-dialog');
+const audioVolume = document.getElementById('audio-volume');
+const audioGain = document.getElementById('audio-gain');
+const audioMute = document.getElementById('audio-mute');
+const audioStatus = document.getElementById('audio-status');
+let outputMuted = false;
+function renderAudio(state) {
+  for (const control of [audioVolume, audioGain, audioMute]) control.disabled = !state.available;
+  if (!state.available) {
+    audioStatus.textContent = state.error || 'ADAC interface unavailable';
+    document.getElementById('audio-info').textContent = 'Connect the ADAC interface to use its hardware controls.';
+    document.getElementById('audio-inputs').textContent = '';
+    return;
+  }
+  audioVolume.value = Math.max(-60, state.volume_db);
+  audioGain.value = state.input_gain_db;
+  document.getElementById('audio-volume-value').textContent = `${state.volume_db} dB`;
+  document.getElementById('audio-gain-value').textContent = `${state.input_gain_db >= 0 ? '+' : ''}${state.input_gain_db} dB`;
+  outputMuted = state.muted;
+  audioMute.textContent = outputMuted ? 'Unmute output' : 'Mute output';
+  audioMute.setAttribute('aria-pressed', String(outputMuted));
+  document.getElementById('audio-info').textContent = state.rate ?
+    `${state.rate / 1000} kHz · ${state.period_frames} frames/period · ${state.buffer_frames} frame ring` : 'Audio stream is stopped';
+  document.getElementById('audio-inputs').textContent =
+    `${state.left_input || 'Left input'} / ${state.right_input || 'Right input'} · ${state.mic_bias || 'Bias status unavailable'}`;
+  audioStatus.textContent = 'Changes save automatically. Input gain applies before effects.';
+}
+async function updateAudio(settings) {
+  const options = settings === undefined ? {} : {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(settings)};
+  const response = await fetch('/api/audio', options);
+  const state = await response.json();
+  if (!response.ok) throw new Error(state.error || 'Could not apply audio setting');
+  renderAudio(state);
+}
+document.getElementById('audio-open').addEventListener('click', async () => {
+  audioDialog.showModal();
+  try { await updateAudio(); } catch (error) { audioStatus.textContent = error.message; }
+});
+document.getElementById('audio-close').addEventListener('click', () => audioDialog.close());
+for (const [control, key, output] of [[audioVolume, 'volume_db', 'audio-volume-value'], [audioGain, 'input_gain_db', 'audio-gain-value']]) {
+  control.addEventListener('input', () => { document.getElementById(output).textContent = `${control.value} dB`; });
+  control.addEventListener('change', async () => {
+    try { await updateAudio({[key]: Number(control.value)}); }
+    catch (error) { audioStatus.textContent = error.message; }
+  });
+}
+audioMute.addEventListener('click', async () => {
+  try { await updateAudio({muted: !outputMuted}); }
+  catch (error) { audioStatus.textContent = error.message; }
+});
 async function refresh() {
   try { await request('/api/state'); } catch (error) { status.textContent = error.message; }
 }

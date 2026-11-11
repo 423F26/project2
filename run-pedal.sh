@@ -13,12 +13,14 @@ ui="$root/build/lvgl/pedal-lvgl"
 preview=false
 fullscreen=true
 check=false
+show_audio=false
 for argument in "$@"; do
     case "$argument" in
         --preview) preview=true ;;
         --windowed) fullscreen=false ;;
         --check) check=true ;;
-        *) echo "Usage: $0 [--preview] [--windowed] [--check]" >&2; exit 2 ;;
+        --audio-settings) show_audio=true ;;
+        *) echo "Usage: $0 [--preview] [--windowed] [--check] [--audio-settings]" >&2; exit 2 ;;
     esac
 done
 fail() {
@@ -48,6 +50,7 @@ if ! $preview; then
 fi
 if $check; then echo 'Audio interface and current native pedal builds are ready.'; exit 0; fi
 exec >>"$cache/launcher.log" 2>&1
+if ! $preview; then "$root/build/release/pedal-audio" restore || true; fi
 export LV2_PATH="$root/build/release/lv2:${LV2_PATH:-$HOME/.lv2:/usr/local/lib/lv2:/usr/lib/lv2}"
 owned_engine=
 session_ready=false
@@ -78,4 +81,5 @@ if ! $preview; then
     arguments+=(--live)
 fi
 if $fullscreen; then arguments+=(--fullscreen); fi
+if $show_audio; then arguments+=(--audio-settings); fi
 "$ui" "${arguments[@]}" 9>&- || fail "Native UI could not open. Details: $cache/launcher.log"

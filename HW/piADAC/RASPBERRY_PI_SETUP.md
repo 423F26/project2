@@ -100,15 +100,36 @@ Launcher backup: `/home/pi/.cache/ml-guitar-pedal/run-pedal.sh.before-adac-20261
 ## Mixer baseline
 
 The configured baseline uses single-ended VINL1/VINR1 capture, ADC gain 0 dB,
-microphone bias off, and DAC digital volume -30 dB, unmuted. Settings were saved
+microphone bias off, and DAC digital volume -12 dB, unmuted. Initial bring-up used
+-30 dB; the level was raised for listening. System settings were saved
 with `sudo alsactl store`.
 
 ```sh
 amixer -c sndrpihifiberry sset 'ADC Mic Bias' 'Mic Bias off'
 amixer -c sndrpihifiberry sset ADC 0dB
-amixer -c sndrpihifiberry -- sset Digital -30dB unmute
+amixer -c sndrpihifiberry -- sset Digital -12dB unmute
 sudo alsactl store
 ```
+
+The native **AUDIO** button and browser **Audio** panel expose output level
+(-60 to 0 dB), output mute, and ADC input gain (-12 to +32 dB). Rate, hardware
+period/buffer sizes, input selection, and microphone-bias status are shown for
+reference. These controls use ALSA's named mixer controls in the UI processes;
+they do not perform mixer I/O on the engine's audio thread. Clock, VCOM, raw
+register, and microphone-bias writes are not exposed.
+
+Changes save to `~/.config/ml-guitar-pedal/audio.json` (or under
+`$XDG_CONFIG_HOME`) and restore on each desktop/boot launch. `pedal-audio state`
+prints the current interface settings; `pedal-audio restore` reapplies the saved
+levels. Input gain precedes the effects; increase it only while watching for
+clipping. Output level affects both output channels after processing.
+
+Playback now starts after two periods/blocks rather than waiting for the whole
+ring to fill. The ring retains capacity for scheduling jitter. At the default
+48 kHz / 128 frame settings the playback start threshold is 256 frames (5.33 ms)
+instead of 512 frames (10.67 ms). This is a buffering setting, not a measured
+analogue round-trip latency. The enabled Octave effect separately reports 768
+frames (16 ms) of algorithmic delay; its algorithm has been preserved.
 
 The DAC's extra 24 dB gain option is not enabled. Do not use raw register writes,
 force access to driver-owned I²C addresses, change the VCOM mode, or manually

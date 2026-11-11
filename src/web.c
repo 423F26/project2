@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 #include "socket_client.h"
+#include "audio_settings.h"
 #include <arpa/inet.h>
 #include <errno.h>
 #include <json-c/json.h>
@@ -98,6 +99,16 @@ static char *read_html(const char *path) {
     fclose(f); data[read_count] = 0;
     return data;
 }
+static void audio_response(int fd, json_object *settings) {
+    char error[200];
+    int status = 200;
+    if(settings && !audio_settings_validate(settings, error, sizeof(error))) status = 400;
+    else if(settings && !audio_settings_apply(settings, error, sizeof(error))) status = 503;
+    json_object *result = status == 200 ? audio_settings_read() : json_object_new_object();
+    if(status != 200) json_object_object_add(result, "error", json_object_new_string(error));
+    response(fd, status, "application/json", json_object_to_json_string(result));
+    json_object_put(result);
+}
 static void handle(int fd, const char *html) {
     char request[16384]; size_t used = 0, header_end = 0;
     while(used < sizeof(request) - 1) {
@@ -111,6 +122,7 @@ static void handle(int fd, const char *html) {
     char method[8], path[128];
     if(sscanf(request, "%7s %127s", method, path) != 2) { response(fd, 400, "application/json", "{\"error\":\"Bad request\"}"); return; }
     if(strcmp(method, "GET") == 0 && strcmp(path, "/") == 0) { response(fd, 200, "text/html; charset=utf-8", html); return; }
+    if(strcmp(method, "GET") == 0 && strcmp(path, "/api/audio") == 0) { audio_response(fd, NULL); return; }
     if(strcmp(method, "GET") == 0 && (strcmp(path, "/api/state") == 0 || strcmp(path, "/api/lv2") == 0 || strcmp(path, "/api/midi") == 0)) {
         const char *command = strcmp(path, "/api/lv2") == 0 ? "lv2-list" :
                               strcmp(path, "/api/midi") == 0 ? "midi-events" : "state";
@@ -136,6 +148,11 @@ static void handle(int fd, const char *html) {
     }
     request[header_end + content_length] = 0;
     json_object *body = json_tokener_parse(request + header_end);
+    if(strcmp(path, "/api/audio") == 0 && body && json_object_is_type(body, json_type_object)) {
+        audio_response(fd, body);
+        json_object_put(body);
+        return;
+    }
     char *command = body && json_object_is_type(body, json_type_object) ? command_for(path, body) : NULL;
     if(body) json_object_put(body);
     if(!command) { response(fd, 400, "application/json", "{\"error\":\"Invalid request\"}"); return; }

@@ -53,6 +53,11 @@ for i in {1..100}; do curl -fsS "http://127.0.0.1:$port/api/state" >"$tmp/state"
 jq -e '.pedals == []' "$tmp/state"
 curl -fsS "http://127.0.0.1:$port/" >"$tmp/page"
 grep -q 'Import effect' "$tmp/page"
+curl -fsS "http://127.0.0.1:$port/api/audio" | jq -e '.available | type == "boolean"'
+for payload in '{}' '{"volume_db":1}' '{"volume_db":"0"}' '{"muted":1}' '{"mic_bias":true}' '{"register":2}'; do
+  code=$(curl -sS -o "$tmp/rejected" -w '%{http_code}' -H 'Content-Type: application/json' -d "$payload" "http://127.0.0.1:$port/api/audio")
+  [[ $code == 400 ]]
+done
 curl -fsS -H 'Content-Type: application/json' -d '{"pedals":["chorus","tremolo"]}' "http://127.0.0.1:$port/api/board" | jq -e '.pedals == ["chorus","tremolo"]'
 curl -fsS -H 'Content-Type: application/json' -d '{"pedal":"chorus","bypassed":true}' "http://127.0.0.1:$port/api/bypass" | jq -e '.available.chorus.bypassed == true and .pedals == ["chorus","tremolo"]'
 curl -fsS -H 'Content-Type: application/json' -d '{"pedal":"chorus","bypassed":false}' "http://127.0.0.1:$port/api/bypass" | jq -e '.available.chorus.bypassed == false'

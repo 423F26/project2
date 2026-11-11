@@ -6,4 +6,12 @@ Run `pedal-web` from the project root to control the board in a browser at `http
 
 For a remote browser, forward the local port with `ssh -L 8765:127.0.0.1:8765 pi-host`. The web server serves only on loopback. The default engine socket is `/run/guitar-effect.sock`; set `PEDAL_CONTROL_SOCKET` in all processes to override it.
 
+On the ADAC-equipped Pi, use **AUDIO** in the native UI or **Audio** in the browser
+for hardware output level, output mute, and input gain. Levels are shown in dB
+and save automatically for the next launch. This output level is separate from
+the effect mix and individual pedal levels. The panel also shows the audio rate,
+buffer sizes, and microphone-bias status. It disables hardware controls when
+ADAC is unavailable. See the [ADAC setup guide](../../HW/piADAC/RASPBERRY_PI_SETUP.md)
+for ranges and persistence details.
+
 On Raspberry Pi hardware, `pedal-footswitch` watches GPIO 17 with `gpiomon` and toggles the pedal when pressed. Its default chip and line can be changed with `--chip` and `--line`.

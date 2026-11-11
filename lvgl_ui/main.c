@@ -1,6 +1,7 @@
 #include <lvgl/lvgl.h>
 #include <SDL.h>
 #include <json-c/json.h>
+#include "audio_settings.h"
 
 #include <math.h>
 #include <stdbool.h>
@@ -58,6 +59,15 @@ static lv_obj_t * slider;
 static lv_obj_t * amount_label;
 static lv_obj_t * config_overlay;
 static lv_obj_t * library_overlay;
+static lv_obj_t * audio_overlay;
+static lv_obj_t * audio_sliders[2];
+static lv_obj_t * audio_values[2];
+static lv_obj_t * audio_status;
+static lv_obj_t * audio_info;
+static lv_obj_t * audio_inputs;
+static lv_obj_t * audio_mute;
+static lv_obj_t * audio_mute_label;
+static bool output_muted;
 static lv_obj_t * config_values[9];
 static lv_obj_t * config_sliders[9];
 static lv_obj_t * config_status;
@@ -78,6 +88,7 @@ static float settings[PEDAL_COUNT][PARAMETER_COUNT] = {
 };
 
 static void refresh_state(lv_timer_t * timer);
+static void audio_open(lv_event_t *event);
 
 static lv_color_t color(uint32_t hex)
 {
@@ -496,10 +507,114 @@ static void config_open(lv_event_t * event)
                           30, 353, &lv_font_montserrat_14, C_MUTED);
 }
 
+static void audio_refresh(void)
+{
+    json_object *state = audio_settings_read();
+    bool available = live_mode && json_object_get_boolean(json_object_object_get(state, "available"));
+    for(int i = 0; i < 2; ++i) {
+        if(available) lv_obj_remove_state(audio_sliders[i], LV_STATE_DISABLED);
+        else lv_obj_add_state(audio_sliders[i], LV_STATE_DISABLED);
+        if(!available || lv_obj_has_state(audio_sliders[i], LV_STATE_PRESSED)) continue;
+        int value = (int)lround(json_object_get_double(json_object_object_get(state, i ? "input_gain_db" : "volume_db")));
+        lv_slider_set_value(audio_sliders[i], value, LV_ANIM_OFF);
+        lv_label_set_text_fmt(audio_values[i], "%+d dB", value);
+    }
+    if(available) {
+        lv_obj_remove_state(audio_mute, LV_STATE_DISABLED);
+        output_muted = json_object_get_boolean(json_object_object_get(state, "muted"));
+        lv_label_set_text(audio_mute_label, output_muted ? "OUTPUT MUTED" : "OUTPUT ON");
+        lv_obj_set_style_text_color(audio_mute_label, color(output_muted ? C_GOLD : C_ACCENT), 0);
+        unsigned rate = (unsigned)json_object_get_int(json_object_object_get(state, "rate"));
+        int period = json_object_get_int(json_object_object_get(state, "period_frames"));
+        int buffer = json_object_get_int(json_object_object_get(state, "buffer_frames"));
+        lv_label_set_text_fmt(audio_info, "%u Hz  /  %d frame periods  /  %d frame ring", rate, period, buffer);
+        const char *bias = json_object_get_string(json_object_object_get(state, "mic_bias"));
+        lv_label_set_text_fmt(audio_inputs, "I2C control  /  I2S audio  /  %s", bias ? bias : "Bias status unavailable");
+        lv_label_set_text(audio_status, "CHANGES SAVE AUTOMATICALLY");
+    } else {
+        lv_obj_add_state(audio_mute, LV_STATE_DISABLED);
+        lv_label_set_text(audio_info, "ADAC hardware controls require the connected Pi");
+        lv_label_set_text(audio_inputs, "Output: -60 to 0 dB  /  Input gain: -12 to +32 dB");
+        lv_label_set_text(audio_status, live_mode ? "ADAC INTERFACE UNAVAILABLE" : "PREVIEW  /  HARDWARE CONTROLS DISABLED");
+    }
+    json_object_put(state);
+}
+
+static void audio_changed(lv_event_t *event)
+{
+    int index = (int)(intptr_t)lv_event_get_user_data(event);
+    lv_label_set_text_fmt(audio_values[index], "%+d dB", (int)lv_slider_get_value(audio_sliders[index]));
+}
+
+static void audio_apply(lv_event_t *event)
+{
+    if(!live_mode) return;
+    int index = (int)(intptr_t)lv_event_get_user_data(event);
+    json_object *settings = json_object_new_object();
+    if(index == 2) json_object_object_add(settings, "muted", json_object_new_boolean(!output_muted));
+    else json_object_object_add(settings, index ? "input_gain_db" : "volume_db",
+                                json_object_new_int(lv_slider_get_value(audio_sliders[index])));
+    char error[200];
+    bool ok = audio_settings_apply(settings, error, sizeof(error));
+    json_object_put(settings);
+    audio_refresh();
+    if(!ok) lv_label_set_text(audio_status, error);
+}
+
+static void audio_close(lv_event_t *event)
+{
+    (void)event;
+    lv_obj_delete_async(audio_overlay);
+    audio_overlay = NULL;
+}
+
+static void audio_open(lv_event_t *event)
+{
+    (void)event;
+    if(audio_overlay) return;
+    audio_overlay = box(lv_screen_active(), 0, 0, WIDTH, HEIGHT, C_BG, 0);
+    lv_obj_set_style_bg_opa(audio_overlay, LV_OPA_80, 0);
+    lv_obj_t *panel = box(audio_overlay, 94, 45, 612, 390, C_CARD, 20);
+    label(panel, "AUDIO  /  HIFIBERRY ADAC", 28, 22, &lv_font_montserrat_20, C_ACCENT);
+    label(panel, "Hardware levels before and after the pedal chain", 28, 54, &lv_font_montserrat_14, C_MUTED);
+    lv_obj_t *close = box(panel, 541, 16, 44, 44, C_TILE, 10);
+    lv_obj_set_clickable(close, true);
+    lv_obj_add_event_cb(close, audio_close, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *icon = label(close, LV_SYMBOL_CLOSE, 0, 0, &lv_font_montserrat_20, C_TEXT);
+    lv_obj_center(icon);
+    for(int i = 0; i < 2; ++i) {
+        int y = 108 + i * 76;
+        label(panel, i ? "INPUT GAIN" : "OUTPUT LEVEL", 30, y, &lv_font_montserrat_14, C_TEXT);
+        audio_sliders[i] = lv_slider_create(panel);
+        lv_obj_set_pos(audio_sliders[i], 190, y + 10);
+        lv_obj_set_size(audio_sliders[i], 280, 8);
+        lv_slider_set_range(audio_sliders[i], i ? -12 : -60, i ? 32 : 0);
+        lv_obj_set_style_bg_color(audio_sliders[i], color(C_LINE), LV_PART_MAIN);
+        lv_obj_set_style_bg_color(audio_sliders[i], color(C_ACCENT), LV_PART_INDICATOR);
+        lv_obj_set_style_bg_color(audio_sliders[i], color(C_ACCENT), LV_PART_KNOB);
+        lv_obj_set_style_pad_all(audio_sliders[i], 10, LV_PART_KNOB);
+        lv_obj_add_event_cb(audio_sliders[i], audio_changed, LV_EVENT_VALUE_CHANGED, (void *)(intptr_t)i);
+        lv_obj_add_event_cb(audio_sliders[i], audio_apply, LV_EVENT_RELEASED, (void *)(intptr_t)i);
+        audio_values[i] = label(panel, "-- dB", 495, y - 3, &lv_font_montserrat_14, C_MUTED);
+    }
+    audio_mute = box(panel, 30, 241, 238, 44, C_TILE, 10);
+    lv_obj_set_clickable(audio_mute, true);
+    lv_obj_add_event_cb(audio_mute, audio_apply, LV_EVENT_CLICKED, (void *)(intptr_t)2);
+    audio_mute_label = label(audio_mute, "OUTPUT ON", 0, 0, &lv_font_montserrat_14, C_ACCENT);
+    lv_obj_center(audio_mute_label);
+    label(panel, "Gain applies before effects", 288, 255, &lv_font_montserrat_14, C_MUTED);
+    audio_info = label(panel, "", 30, 305, &lv_font_montserrat_14, C_TEXT);
+    audio_inputs = label(panel, "", 30, 329, &lv_font_montserrat_14, C_MUTED);
+    audio_status = label(panel, "", 30, 359, &lv_font_montserrat_14, C_MUTED);
+    lv_obj_set_width(audio_status, 552);
+    lv_label_set_long_mode(audio_status, LV_LABEL_LONG_DOT);
+    audio_refresh();
+}
+
 static void refresh_state(lv_timer_t * timer)
 {
     (void)timer;
-    if(!live_mode || dragging >= 0 || config_overlay || library_overlay) return;
+    if(!live_mode || dragging >= 0 || config_overlay || library_overlay || audio_overlay) return;
     if(read_state()) {
         render_board();
         show_status(view_only ? "USE BROWSER FOR LV2 CHAIN" : "CONNECTED TO PEDAL",
@@ -518,6 +633,10 @@ static void build_ui(void)
     box(screen, 24, 20, 42, 42, C_ACCENT, 12);
     label(screen, "P", 37, 23, &lv_font_montserrat_28, C_BG);
     label(screen, "PEDAL / LAB", 80, 25, &lv_font_montserrat_20, C_TEXT);
+    lv_obj_t *audio_button = box(screen, 602, 20, 96, 42, C_TILE, 10);
+    lv_obj_set_clickable(audio_button, true);
+    lv_obj_add_event_cb(audio_button, audio_open, LV_EVENT_CLICKED, NULL);
+    label(audio_button, "AUDIO", 16, 12, &lv_font_montserrat_14, C_ACCENT);
     lv_obj_t *exit_button = box(screen, 710, 20, 66, 42, C_TILE, 10);
     lv_obj_set_clickable(exit_button, true);
     lv_obj_add_event_cb(exit_button, exit_clicked, LV_EVENT_CLICKED, NULL);
@@ -601,11 +720,13 @@ int main(int argc, char ** argv)
 {
     bool fullscreen = false;
     bool self_test = false;
+    bool show_audio = false;
     for(int i = 1; i < argc; ++i) {
         if(strcmp(argv[i], "--live") == 0) live_mode = true;
         else if(strcmp(argv[i], "--fullscreen") == 0) fullscreen = true;
         else if(strcmp(argv[i], "--self-test") == 0) self_test = true;
-        else { fprintf(stderr, "Usage: %s [--live] [--fullscreen]\n", argv[0]); return 2; }
+        else if(strcmp(argv[i], "--audio-settings") == 0) show_audio = true;
+        else { fprintf(stderr, "Usage: %s [--live] [--fullscreen] [--audio-settings]\n", argv[0]); return 2; }
     }
     lv_init();
     lv_display_t * display = lv_sdl_window_create(WIDTH, HEIGHT);
@@ -620,6 +741,7 @@ int main(int argc, char ** argv)
     lv_sdl_mouse_create();
     lv_sdl_keyboard_create();
     build_ui();
+    if(show_audio) audio_open(NULL);
     if(live_mode) {
         refresh_state(NULL);
         lv_timer_create(refresh_state, 1000, NULL);
