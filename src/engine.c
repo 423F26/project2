@@ -125,11 +125,38 @@ static json_object *settings(const Pedal *pedal)
     return object;
 }
 
+static uint64_t monotonic_ns(void)
+{
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    return (uint64_t)now.tv_sec * 1000000000 + (uint64_t)now.tv_nsec;
+}
+
+static json_object *encoder_state(Engine *engine)
+{
+    json_object *object = json_object_new_object();
+    Pedal *pedal = engine_find(engine, engine->encoder_pedal);
+    ParameterInfo info;
+    bool assigned = engine_parameter_info(engine, pedal, engine->encoder_parameter, &info);
+    json_object_object_add(object, "pedal", assigned ? json_object_new_string(pedal->id) : NULL);
+    json_object_object_add(object, "parameter", assigned ? json_object_new_string(engine->encoder_parameter) : NULL);
+    json_object_object_add(object, "value", assigned ? json_object_new_double(info.value) : NULL);
+    json_object_object_add(object, "online", json_object_new_boolean(engine->encoder_heartbeat_ns &&
+                           monotonic_ns() - engine->encoder_heartbeat_ns < 3000000000ULL));
+    json_object_object_add(object, "bypassed", json_object_new_boolean(assigned && pedal->bypassed));
+    bool active = false;
+    for(size_t i = 0; i < engine->active_count; ++i)
+        if(pedal == &engine->pedals[engine->active[i]]) active = true;
+    json_object_object_add(object, "active", json_object_new_boolean(active));
+    return object;
+}
+
 static json_object *state(Engine *engine)
 {
     json_object *root = json_object_new_object();
     json_object_object_add(root, "enabled", json_object_new_boolean(engine->enabled));
     json_object_object_add(root, "amount", json_object_new_double(engine->amount));
+    json_object_object_add(root, "encoder", encoder_state(engine));
     json_object *tuner = json_object_new_object();
     json_object_object_add(tuner, "enabled", json_object_new_boolean(engine->tuner.enabled));
     char note_name[8];
@@ -163,21 +190,16 @@ static json_object *state(Engine *engine)
         json_object_object_add(info, "settings", config);
         json_object_object_add(info, "uri", pedal->kind == LV2 ? json_object_new_string(pedal->uri) : NULL);
         json_object *ranges = json_object_new_object();
-        if(strcmp(pedal->id, "octave") == 0) {
+        json_object_object_foreach(config, key, value) {
+            (void)value;
+            ParameterInfo parameter;
+            if(!engine_parameter_info(engine, pedal, key, &parameter)) continue;
             json_object *range = json_object_new_object();
-            json_object_object_add(range, "min", json_object_new_double(0));
-            json_object_object_add(range, "max", json_object_new_double(1));
-            json_object_object_add(ranges, "mix", range);
+            json_object_object_add(range, "min", parameter.has_minimum ? json_object_new_double(parameter.minimum) : NULL);
+            json_object_object_add(range, "max", parameter.has_maximum ? json_object_new_double(parameter.maximum) : NULL);
+            json_object_object_add(range, "step", json_object_new_double(parameter.step));
+            json_object_object_add(ranges, key, range);
         }
-        if(pedal->kind == LV2)
-            for(size_t p = 0; p < pedal->control_count; ++p) {
-                ControlPort *port = &pedal->controls[p];
-                if(!port->input) continue;
-                json_object *range = json_object_new_object();
-                json_object_object_add(range, "min", port->has_minimum ? json_object_new_double(port->minimum) : NULL);
-                json_object_object_add(range, "max", port->has_maximum ? json_object_new_double(port->maximum) : NULL);
-                json_object_object_add(ranges, port->symbol, range);
-            }
         json_object_object_add(info, "ranges", ranges);
         json_object_object_add(available, pedal->id, info);
     }
@@ -256,6 +278,26 @@ static char *reply_command(Engine *engine, const char *command)
     char error[256] = "invalid command";
     json_object *result = NULL;
     if(strcmp(command, "state") == 0) result = state(engine);
+    else if(strcmp(command, "encoder heartbeat") == 0 || strcmp(command, "encoder disconnect") == 0) {
+        engine->encoder_heartbeat_ns = strcmp(command, "encoder heartbeat") == 0 ? monotonic_ns() : 0;
+        return strdup("ok\n");
+    } else if(strcmp(command, "encoder clear") == 0) {
+        engine->encoder_pedal[0] = engine->encoder_parameter[0] = '\0';
+        result = state(engine);
+    } else if(strncmp(command, "encoder assign ", 15) == 0) {
+        char id[32], parameter[96], extra;
+        if(sscanf(command + 15, "%31s %95s %c", id, parameter, &extra) == 2 &&
+           engine_encoder_assign(engine, id, parameter)) result = state(engine);
+        else snprintf(error, sizeof(error), "use encoder assign PEDAL PARAMETER");
+    } else if(strncmp(command, "encoder turn ", 13) == 0) {
+        double steps;
+        if(parse_number(command + 13, &steps) && steps >= -1000 && steps <= 1000 &&
+           steps == trunc(steps) && engine_encoder_turn(engine, (int)steps)) return strdup("ok\n");
+        snprintf(error, sizeof(error), "encoder unassigned or invalid turn");
+    } else if(strcmp(command, "encoder press") == 0) {
+        if(engine_encoder_press(engine)) return strdup("ok\n");
+        snprintf(error, sizeof(error), "encoder has no assigned pedal");
+    }
     else if(strcmp(command, "midi-events") == 0) result = midi_events(engine);
     else if(strcmp(command, "tuner on") == 0 || strcmp(command, "tuner off") == 0) {
         tuner_set_enabled(&engine->tuner, strcmp(command, "tuner on") == 0);

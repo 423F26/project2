@@ -39,7 +39,7 @@ fi
 exec 9>"$cache/launcher.lock"
 flock -n 9 || exit 0
 "$root/scripts/build-pedal.sh" >>"$cache/launcher.log" 2>&1 || fail "Pedal build failed. Details: $cache/launcher.log"
-for binary in "$engine" "$ctl" "$ui"; do
+for binary in "$engine" "$ctl" "$ui" "$root/build/release/pedal-encoder"; do
     [[ -x "$binary" ]] || fail "Pedal build missing: $binary"
 done
 if ! $preview; then
@@ -55,8 +55,13 @@ exec >>"$cache/launcher.log" 2>&1
 if ! $preview; then "$root/build/release/pedal-audio" restore || true; fi
 export LV2_PATH="$root/build/release/lv2:${LV2_PATH:-$HOME/.lv2:/usr/local/lib/lv2:/usr/lib/lv2}"
 owned_engine=
+owned_encoder=
 session_ready=false
 cleanup() {
+    if [[ -n "$owned_encoder" ]]; then
+        kill "$owned_encoder" 2>/dev/null || true
+        wait "$owned_encoder" 2>/dev/null || true
+    fi
     if ! $preview && $session_ready; then python3 "$root/scripts/pedal-session.py" save || true; fi
     if [[ -n "$owned_engine" ]]; then
         kill "$owned_engine" 2>/dev/null || true
@@ -80,6 +85,12 @@ if ! $preview; then
         python3 "$root/scripts/pedal-session.py" restore
     fi
     session_ready=true
+    if [[ -e "${PEDAL_ENCODER_CHIP:-/dev/gpiochip0}" && "${PEDAL_ENCODER_DISABLED:-0}" != 1 ]]; then
+        encoder_arguments=(--chip "${PEDAL_ENCODER_CHIP:-/dev/gpiochip0}" --edges-per-step "${PEDAL_ENCODER_EDGES:-4}")
+        if [[ "${PEDAL_ENCODER_REVERSE:-0}" == 1 ]]; then encoder_arguments+=(--reverse); fi
+        "$root/build/release/pedal-encoder" "${encoder_arguments[@]}" 9>&- &
+        owned_encoder=$!
+    fi
     arguments+=(--live)
 fi
 if $fullscreen; then arguments+=(--fullscreen); fi

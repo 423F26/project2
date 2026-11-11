@@ -25,7 +25,13 @@ typedef struct {
     bool has_minimum;
     bool has_maximum;
     bool input;
+    bool integer, toggled, enumeration;
 } ControlPort;
+
+typedef struct {
+    double value, minimum, maximum, step;
+    bool has_minimum, has_maximum;
+} ParameterInfo;
 
 typedef struct {
     PedalKind kind;
@@ -61,6 +67,8 @@ typedef struct {
     LilvWorld *world;
     MidiQueue midi;
     Tuner tuner;
+    char encoder_pedal[32], encoder_parameter[96];
+    uint64_t encoder_heartbeat_ns;
     int16_t scratch_a[MAX_BLOCK], scratch_b[MAX_BLOCK], old[MAX_BLOCK];
     float lv2_in[MAX_BLOCK], lv2_out[MAX_BLOCK];
 } Engine;
@@ -71,6 +79,10 @@ Pedal *engine_find(Engine *engine, const char *id);
 bool engine_set_board(Engine *engine, const size_t *indices, size_t count);
 bool engine_set_bypass(Engine *engine, Pedal *pedal, bool bypassed);
 bool engine_config(Engine *engine, Pedal *pedal, const char *name, double value);
+bool engine_parameter_info(Engine *engine, Pedal *pedal, const char *name, ParameterInfo *info);
+bool engine_encoder_assign(Engine *engine, const char *pedal, const char *parameter);
+bool engine_encoder_turn(Engine *engine, int steps);
+bool engine_encoder_press(Engine *engine);
 void engine_process(Engine *engine, const int16_t *input, int16_t *output, size_t count);
 bool pedal_clone(Pedal *destination, const Pedal *source);
 void pedal_free(Pedal *pedal);
@@ -80,5 +92,6 @@ bool lv2_compatible(Engine *engine, const LilvPlugin *plugin);
 bool lv2_load(Engine *engine, const char *uri, char *error, size_t error_size);
 bool lv2_clone(Pedal *destination, const Pedal *source);
 void lv2_process(Engine *engine, Pedal *pedal, const int16_t *input, int16_t *output, size_t count);
+bool lv2_encoder_choice(Pedal *pedal, ControlPort *port, int steps, double *value);
 
 #endif

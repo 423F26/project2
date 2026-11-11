@@ -79,6 +79,16 @@ static char *command_for(const char *path, json_object *o) {
            !json_object_is_type(value, json_type_boolean)) return NULL;
         snprintf(buffer, sizeof(buffer), "bypass %s %s", pedal,
                  json_object_get_boolean(value) ? "on" : "off");
+    } else if(strcmp(path, "/api/encoder") == 0) {
+        json_object *clear;
+        if(json_object_object_get_ex(o, "clear", &clear)) {
+            if(!json_object_is_type(clear, json_type_boolean) || !json_object_get_boolean(clear)) return NULL;
+            strcpy(buffer, "encoder clear");
+        } else {
+            const char *pedal = field_string(o, "pedal"), *parameter = field_string(o, "parameter");
+            if(!token(pedal) || !token(parameter)) return NULL;
+            snprintf(buffer, sizeof(buffer), "encoder assign %s %s", pedal, parameter);
+        }
     } else if(strcmp(path, "/api/config") == 0) {
         const char *pedal = field_string(o, "pedal"), *setting = field_string(o, "setting");
         double value;

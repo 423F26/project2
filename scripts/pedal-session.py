@@ -32,4 +32,10 @@ elif sys.argv[1] == "restore" and path.exists():
     command("board", ",".join(state["pedals"]) or "-")
     command("amount", state["amount"])
     command("tuner", "on" if state["tuner"]["enabled"] else "off")
+    binding = state.get("encoder", {})
+    if binding.get("pedal") and binding.get("parameter"):
+        try:
+            command("encoder", "assign", binding["pedal"], binding["parameter"])
+        except subprocess.CalledProcessError:
+            print("Saved encoder target is unavailable; assign it again in pedal settings.", file=sys.stderr)
     command("effect" if state["enabled"] else "clean")

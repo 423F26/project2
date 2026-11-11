@@ -165,47 +165,72 @@ bool engine_set_bypass(Engine *engine, Pedal *pedal, bool bypassed)
     return true;
 }
 
-static bool builtin_parameter(Pedal *pedal, const char *name, double value, int rate, double **field)
+static double *builtin_field(Pedal *pedal, const char *name, int rate, ParameterInfo *info)
 {
-    double minimum = 0, maximum = 1;
-    if(strcmp(name, "drive") == 0 && (pedal->kind == OVERDRIVE || pedal->kind == FUZZ)) {
-        *field = &pedal->drive; minimum = 1; maximum = 100;
+    double minimum = 0, maximum = 1, step = .01, *field = NULL;
+    if(strcmp(pedal->id, "octave") == 0 && strcmp(name, "mix") == 0) field = &pedal->mix;
+    else if(strcmp(name, "drive") == 0 && (pedal->kind == OVERDRIVE || pedal->kind == FUZZ)) {
+        field = &pedal->drive; minimum = 1; maximum = 100; step = 1;
     } else if(strcmp(name, "tone") == 0 && (pedal->kind == OVERDRIVE || pedal->kind == FUZZ)) {
-        *field = &pedal->tone; minimum = 100; maximum = rate / 2.0 - .000001;
-    } else if(strcmp(name, "level") == 0 && (pedal->kind == OVERDRIVE || pedal->kind == FUZZ)) {
-        *field = &pedal->level;
-    } else if(strcmp(name, "mix") == 0 && (pedal->kind == OVERDRIVE || pedal->kind == DELAY || pedal->kind == CHORUS)) {
-        *field = &pedal->mix;
-    } else if(strcmp(name, "time") == 0 && pedal->kind == DELAY) {
-        *field = &pedal->time; minimum = 20; maximum = 1500;
+        field = &pedal->tone; minimum = 100; maximum = rate / 2.0 - 1; step = 100;
+    } else if(strcmp(name, "level") == 0 && (pedal->kind == OVERDRIVE || pedal->kind == FUZZ)) field = &pedal->level;
+    else if(strcmp(name, "mix") == 0 && (pedal->kind == OVERDRIVE || pedal->kind == DELAY || pedal->kind == CHORUS)) field = &pedal->mix;
+    else if(strcmp(name, "time") == 0 && pedal->kind == DELAY) {
+        field = &pedal->time; minimum = 20; maximum = 1500; step = 10;
     } else if(strcmp(name, "feedback") == 0 && pedal->kind == DELAY) {
-        *field = &pedal->feedback; maximum = .9;
+        field = &pedal->feedback; maximum = .9;
     } else if(strcmp(name, "rate") == 0 && (pedal->kind == TREMOLO || pedal->kind == CHORUS)) {
-        *field = &pedal->rate; minimum = .1; maximum = pedal->kind == TREMOLO ? 20 : 5;
-    } else if(strcmp(name, "depth") == 0 && (pedal->kind == TREMOLO || pedal->kind == CHORUS)) {
-        *field = &pedal->depth;
-    } else if(strcmp(name, "ceiling") == 0 && pedal->kind == LIMITER) {
-        *field = &pedal->ceiling; minimum = -36; maximum = 0;
+        field = &pedal->rate; minimum = .1; maximum = pedal->kind == TREMOLO ? 20 : 5; step = .1;
+    } else if(strcmp(name, "depth") == 0 && (pedal->kind == TREMOLO || pedal->kind == CHORUS)) field = &pedal->depth;
+    else if(strcmp(name, "ceiling") == 0 && pedal->kind == LIMITER) {
+        field = &pedal->ceiling; minimum = -36; maximum = 0; step = 1;
     } else if(strcmp(name, "release") == 0 && pedal->kind == LIMITER) {
-        *field = &pedal->release; minimum = 5; maximum = 1000;
-    } else return false;
-    return isfinite(value) && value >= minimum && value <= maximum;
+        field = &pedal->release; minimum = 5; maximum = 1000; step = 10;
+    }
+    if(field) *info = (ParameterInfo){.value = *field, .minimum = minimum, .maximum = maximum,
+                                    .step = step, .has_minimum = true, .has_maximum = true};
+    return field;
+}
+
+bool engine_parameter_info(Engine *engine, Pedal *pedal, const char *name, ParameterInfo *info)
+{
+    if(!pedal || !name || !info) return false;
+    if(builtin_field(pedal, name, engine->rate, info)) return true;
+    if(pedal->kind != LV2) return false;
+    for(size_t i = 0; i < pedal->control_count; ++i) {
+        ControlPort *port = &pedal->controls[i];
+        if(!port->input || strcmp(port->symbol, name) != 0) continue;
+        double step = port->has_minimum && port->has_maximum ?
+                      (port->maximum - port->minimum) / 100 : .01;
+        if(!isfinite(step) || step <= 0) step = .01;
+        if(port->integer) step = fmax(1, round(step));
+        if(port->toggled) step = 1;
+        *info = (ParameterInfo){.value = port->value, .minimum = port->minimum,
+            .maximum = port->maximum, .step = step,
+            .has_minimum = port->has_minimum, .has_maximum = port->has_maximum};
+        if(port->toggled) {
+            info->minimum = 0; info->maximum = 1;
+            info->has_minimum = info->has_maximum = true;
+        }
+        return true;
+    }
+    return false;
 }
 
 bool engine_config(Engine *engine, Pedal *pedal, const char *name, double value)
 {
-    if(!pedal || !isfinite(value)) return false;
-    double *field = NULL;
+    ParameterInfo info;
+    if(!isfinite(value) || !engine_parameter_info(engine, pedal, name, &info) ||
+       (info.has_minimum && value < info.minimum) ||
+       (info.has_maximum && value > info.maximum)) return false;
+    double *field = builtin_field(pedal, name, engine->rate, &info);
     ControlPort *port = NULL;
-    if(strcmp(pedal->id, "octave") == 0 && strcmp(name, "mix") == 0) {
-        if(value < 0 || value > 1) return false;
-        field = &pedal->mix;
-    } else if(pedal->kind == LV2) {
+    if(!field) {
         for(size_t i = 0; i < pedal->control_count; ++i)
             if(pedal->controls[i].input && strcmp(pedal->controls[i].symbol, name) == 0) port = &pedal->controls[i];
-        if(!port || (port->has_minimum && value < port->minimum) ||
-           (port->has_maximum && value > port->maximum)) return false;
-    } else if(!builtin_parameter(pedal, name, value, engine->rate, &field)) return false;
+        if(!port) return false;
+    }
+    if(info.value == value) return true;
     bool active = false;
     for(size_t i = 0; i < engine->active_count; ++i)
         if(pedal == &engine->pedals[engine->active[i]]) active = true;
@@ -214,6 +239,51 @@ bool engine_config(Engine *engine, Pedal *pedal, const char *name, double value)
     else *field = value;
     if(field && strcmp(name, "tone") == 0) pedal->alpha = 1 - exp(-2 * PI * value / engine->rate);
     return true;
+}
+
+bool engine_encoder_assign(Engine *engine, const char *id, const char *parameter)
+{
+    ParameterInfo info;
+    if(!id || !parameter || strlen(id) >= sizeof(engine->encoder_pedal) ||
+       strlen(parameter) >= sizeof(engine->encoder_parameter) ||
+       !engine_parameter_info(engine, engine_find(engine, id), parameter, &info)) return false;
+    strcpy(engine->encoder_pedal, id);
+    strcpy(engine->encoder_parameter, parameter);
+    return true;
+}
+
+bool engine_encoder_turn(Engine *engine, int steps)
+{
+    Pedal *pedal = engine_find(engine, engine->encoder_pedal);
+    ParameterInfo info;
+    if(steps < -1000 || steps > 1000 ||
+       !engine_parameter_info(engine, pedal, engine->encoder_parameter, &info)) return false;
+    if(!steps) return true;
+    double value = info.value + steps * info.step;
+    if(strcmp(pedal->id, "octave") == 0 && strcmp(engine->encoder_parameter, "pitch") == 0) {
+        int index = info.value < .75 ? 0 : info.value > 1.5 ? 2 : 1;
+        index += steps;
+        if(index < 0) index = 0;
+        if(index > 2) index = 2;
+        value = (double[]){.5, 1, 2}[index];
+    } else if(pedal->kind == LV2) {
+        for(size_t i = 0; i < pedal->control_count; ++i) {
+            ControlPort *port = &pedal->controls[i];
+            if(strcmp(port->symbol, engine->encoder_parameter) != 0) continue;
+            if(port->enumeration && !lv2_encoder_choice(pedal, port, steps, &value)) return false;
+            if(port->toggled && steps) value = steps > 0 ? 1 : 0;
+            else if(port->integer) value = round(value);
+        }
+    }
+    if(info.has_minimum) value = fmax(info.minimum, value);
+    if(info.has_maximum) value = fmin(info.maximum, value);
+    return engine_config(engine, pedal, engine->encoder_parameter, value);
+}
+
+bool engine_encoder_press(Engine *engine)
+{
+    Pedal *pedal = engine_find(engine, engine->encoder_pedal);
+    return pedal && engine_set_bypass(engine, pedal, !pedal->bypassed);
 }
 
 static void process_builtin(Engine *engine, Pedal *pedal, const int16_t *input, int16_t *output, size_t count)

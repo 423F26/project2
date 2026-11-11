@@ -12,6 +12,7 @@ nav:
       - Overview: docs/user/README.md
       - Getting started: docs/user/getting-started.md
       - Live effect: docs/user/live-effect.md
+      - Physical controls: docs/user/physical-controls.md
       - LV2 plugins: docs/user/lv2-plugins.md
       - Tuner and MIDI: docs/user/tuner-midi.md
   - Developer guides:

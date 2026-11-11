@@ -81,11 +81,20 @@ static lv_obj_t * audio_mute;
 static lv_obj_t * audio_mute_label;
 static bool output_muted;
 static lv_obj_t * config_status;
+static lv_obj_t * dial_summary;
+static char encoder_pedal[32], encoder_parameter[96];
+static bool encoder_online, encoder_bypassed;
+static uint32_t config_message_until;
 static int config_pedal = -1;
 enum { DRIVE, TONE, MIX, LEVEL };
 enum { TIME = 4, FEEDBACK, RATE, DEPTH, PITCH, CEILING, RELEASE, PARAMETER_COUNT };
 static lv_obj_t * config_values[PARAMETER_COUNT];
 static lv_obj_t * config_sliders[PARAMETER_COUNT];
+static lv_obj_t * dial_buttons[PARAMETER_COUNT];
+static lv_obj_t * dial_button_labels[PARAMETER_COUNT];
+static double parameter_minimum[PEDAL_COUNT][PARAMETER_COUNT];
+static double parameter_maximum[PEDAL_COUNT][PARAMETER_COUNT];
+static bool parameter_has_range[PEDAL_COUNT][PARAMETER_COUNT];
 static const char * parameter_names[PARAMETER_COUNT] = {"drive", "tone", "mix", "level", "time", "feedback", "rate", "depth", "pitch", "ceiling", "release"};
 static const int pedal_parameters[PEDAL_COUNT][4] = {
     {DRIVE, TONE, MIX, LEVEL}, {DRIVE, TONE, LEVEL, -1},
@@ -104,6 +113,7 @@ static float settings[PEDAL_COUNT][PARAMETER_COUNT] = {
 static void refresh_state(lv_timer_t * timer);
 static void audio_open(lv_event_t *event);
 static void tuner_open(lv_event_t *event);
+static void config_refresh(lv_timer_t *timer);
 
 static lv_color_t color(uint32_t hex)
 {
@@ -186,6 +196,13 @@ static bool read_state(void)
     if(!board || !json_object_is_type(board, json_type_array)) { json_object_put(root); return false; }
     enabled = json_object_get_boolean(json_object_object_get(root, "enabled"));
     amount = (int)lround(100 * json_object_get_double(json_object_object_get(root, "amount")));
+    json_object *binding = json_object_object_get(root, "encoder");
+    const char *bound_pedal = json_object_get_string(json_object_object_get(binding, "pedal"));
+    const char *bound_parameter = json_object_get_string(json_object_object_get(binding, "parameter"));
+    snprintf(encoder_pedal, sizeof(encoder_pedal), "%s", bound_pedal ? bound_pedal : "");
+    snprintf(encoder_parameter, sizeof(encoder_parameter), "%s", bound_parameter ? bound_parameter : "");
+    encoder_online = json_object_get_boolean(json_object_object_get(binding, "online"));
+    encoder_bypassed = json_object_get_boolean(json_object_object_get(binding, "bypassed"));
     json_object *tuner = json_object_object_get(root, "tuner");
     json_object *note = tuner ? json_object_object_get(tuner, "note") : NULL;
     tuner_enabled = tuner && json_object_get_boolean(json_object_object_get(tuner, "enabled"));
@@ -214,6 +231,15 @@ static bool read_state(void)
             json_object *value;
             if(json_object_object_get_ex(values, parameter_names[parameter], &value))
                 settings[pedal][parameter] = (float)json_object_get_double(value);
+            json_object *ranges = info ? json_object_object_get(info, "ranges") : NULL;
+            json_object *range = ranges ? json_object_object_get(ranges, parameter_names[parameter]) : NULL;
+            json_object *minimum = json_object_object_get(range, "min");
+            json_object *maximum = json_object_object_get(range, "max");
+            parameter_has_range[pedal][parameter] = minimum && maximum;
+            if(minimum && maximum) {
+                parameter_minimum[pedal][parameter] = json_object_get_double(minimum);
+                parameter_maximum[pedal][parameter] = json_object_get_double(maximum);
+            }
         }
     }
     json_object_put(root);
@@ -272,6 +298,9 @@ static void render_board(void)
     lv_obj_set_style_text_color(mode_button_label, color(enabled ? C_BG : C_TEXT), 0);
     lv_label_set_text_fmt(amount_label, "MIX  %d%%", amount);
     lv_slider_set_value(slider, amount, LV_ANIM_OFF);
+    lv_label_set_text_fmt(dial_summary, encoder_pedal[0] ? "DIAL / %s %s" : "DIAL / UNASSIGNED",
+                          encoder_pedal, encoder_parameter);
+    lv_obj_set_style_text_color(dial_summary, color(!encoder_pedal[0] ? C_MUTED : encoder_online ? C_ACCENT : C_GOLD), 0);
 }
 
 static void bypass_clicked(lv_event_t *event)
@@ -481,9 +510,70 @@ static void config_released(lv_event_t * event)
     snprintf(request, sizeof(request), "config %s %s %.3f", pedal_names[config_pedal],
              parameter_names[parameter], settings[config_pedal][parameter]);
     if(!command(request, reply, sizeof(reply)))
+    {
         lv_label_set_text(config_status, "COULD NOT APPLY SETTING");
-    else
-        lv_label_set_text(config_status, "APPLIED TO PEDAL");
+        config_message_until = lv_tick_get() + 3000;
+    }
+}
+
+static void dial_assign(lv_event_t *event)
+{
+    int parameter = (int)(intptr_t)lv_event_get_user_data(event);
+    if(config_pedal < 0) return;
+    if(live_mode) {
+        char request[192], reply[32768];
+        snprintf(request, sizeof(request), "encoder assign %s %s", pedal_names[config_pedal], parameter_names[parameter]);
+        if(!command(request, reply, sizeof(reply))) {
+            lv_label_set_text(config_status, "COULD NOT ASSIGN DIAL");
+            config_message_until = lv_tick_get() + 3000;
+            return;
+        }
+    } else {
+        snprintf(encoder_pedal, sizeof(encoder_pedal), "%s", pedal_names[config_pedal]);
+        snprintf(encoder_parameter, sizeof(encoder_parameter), "%s", parameter_names[parameter]);
+    }
+    config_message_until = 0;
+    config_refresh(NULL);
+}
+
+static void dial_clear(lv_event_t *event)
+{
+    (void)event;
+    if(live_mode) {
+        char reply[32768];
+        if(!command("encoder clear", reply, sizeof(reply))) return;
+    } else encoder_pedal[0] = encoder_parameter[0] = '\0';
+    config_message_until = 0;
+    config_refresh(NULL);
+}
+
+static void config_refresh(lv_timer_t *timer)
+{
+    (void)timer;
+    if(!config_overlay || config_pedal < 0) return;
+    // Don't replace a touch edit before its release event applies it.
+    for(int p = 0; p < PARAMETER_COUNT; ++p)
+        if(config_sliders[p] && lv_obj_has_state(config_sliders[p], LV_STATE_PRESSED)) return;
+    if(live_mode && !read_state()) {
+        lv_label_set_text(config_status, "PEDAL DISCONNECTED");
+        return;
+    }
+    for(int p = 0; p < PARAMETER_COUNT; ++p) {
+        if(!config_sliders[p]) continue;
+        int value = config_slider_value(config_pedal, p);
+        lv_slider_set_value(config_sliders[p], value, LV_ANIM_OFF);
+        char text[24];
+        format_config_value(p, value, text, sizeof(text));
+        lv_label_set_text(config_values[p], text);
+        bool assigned = strcmp(encoder_pedal, pedal_names[config_pedal]) == 0 &&
+                        strcmp(encoder_parameter, parameter_names[p]) == 0;
+        lv_obj_set_style_bg_color(dial_buttons[p], color(assigned ? C_ACCENT : C_TILE), 0);
+        lv_obj_set_style_text_color(dial_button_labels[p], color(assigned ? C_BG : C_ACCENT), 0);
+    }
+    if((int32_t)(config_message_until - lv_tick_get()) > 0) return;
+    if(!encoder_pedal[0]) lv_label_set_text(config_status, "TAP DIAL TO ASSIGN THE ENCODER");
+    else lv_label_set_text_fmt(config_status, "DIAL / %s %s%s", encoder_pedal, encoder_parameter,
+                              !encoder_online ? " / OFFLINE" : encoder_bypassed ? " / BYPASSED" : "");
 }
 
 static void config_close(lv_event_t * event)
@@ -493,6 +583,7 @@ static void config_close(lv_event_t * event)
     config_overlay = NULL;
     config_pedal = -1;
     if(live_mode) refresh_state(NULL);
+    else render_board();
 }
 
 static void config_open(lv_event_t * event)
@@ -500,6 +591,7 @@ static void config_open(lv_event_t * event)
     int pedal = (int)(intptr_t)lv_event_get_user_data(event);
     if(config_overlay) return;
     config_pedal = pedal;
+    config_message_until = 0;
     for(int i = 0; i < PARAMETER_COUNT; ++i) {
         config_values[i] = NULL;
         config_sliders[i] = NULL;
@@ -511,8 +603,7 @@ static void config_open(lv_event_t * event)
     char heading[48];
     snprintf(heading, sizeof(heading), "%s  /  SETTINGS", pedal_titles[pedal]);
     label(panel, heading, 28, 22, &lv_font_montserrat_20, pedal_colors[pedal]);
-    label(panel, pedal == LIMITER ? "Instant attack / no lookahead / place last for peak control" :
-          "Adjust this pedal independently", 28, 53, &lv_font_montserrat_14, C_MUTED);
+    label(panel, "Tap DIAL to assign / press the button to bypass its pedal", 28, 53, &lv_font_montserrat_12, C_MUTED);
     lv_obj_t * close = box(panel, 541, 16, 44, 44, C_TILE, 10);
     lv_obj_set_clickable(close, true);
     lv_obj_add_event_cb(close, config_close, LV_EVENT_CLICKED, NULL);
@@ -528,14 +619,20 @@ static void config_open(lv_event_t * event)
         label(panel, titles[parameter], 30, y, &lv_font_montserrat_14, C_TEXT);
         lv_obj_t * control = lv_slider_create(panel);
         config_sliders[parameter] = control;
-        lv_obj_set_pos(control, 152, y + 10);
-        lv_obj_set_size(control, 320, 8);
+        lv_obj_set_pos(control, 140, y + 10);
+        lv_obj_set_size(control, 270, 8);
         int minimum = parameter == DRIVE ? 1 : parameter == TONE ? 100 : parameter == TIME ? 20 : parameter == RATE ? 1 : 0;
         int maximum = parameter == DRIVE ? 100 : parameter == TONE ? 8000 : parameter == TIME ? 1500 :
                       parameter == RATE ? (pedal == CHORUS ? 50 : 200) : parameter == FEEDBACK ? 90 : 100;
         if(parameter == PITCH) { minimum = -1; maximum = 1; }
         if(parameter == CEILING) { minimum = -36; maximum = 0; }
         if(parameter == RELEASE) { minimum = 5; maximum = 1000; }
+        if(parameter != PITCH && parameter_has_range[pedal][parameter]) {
+            int scale = parameter == RATE ? 10 :
+                        parameter == MIX || parameter == LEVEL || parameter == FEEDBACK || parameter == DEPTH ? 100 : 1;
+            minimum = (int)ceil(parameter_minimum[pedal][parameter] * scale);
+            maximum = (int)floor(parameter_maximum[pedal][parameter] * scale);
+        }
         lv_slider_set_range(control, minimum, maximum);
         lv_obj_set_style_bg_color(control, color(C_LINE), LV_PART_MAIN);
         lv_obj_set_style_bg_color(control, color(pedal_colors[pedal]), LV_PART_INDICATOR);
@@ -546,10 +643,22 @@ static void config_open(lv_event_t * event)
         lv_obj_add_event_cb(control, config_released, LV_EVENT_RELEASED, (void *)(intptr_t)parameter);
         char value[24];
         format_config_value(parameter, config_slider_value(pedal, parameter), value, sizeof(value));
-        config_values[parameter] = label(panel, value, 498, y - 3, &lv_font_montserrat_14, C_MUTED);
+        config_values[parameter] = label(panel, value, 425, y - 3, &lv_font_montserrat_14, C_MUTED);
+        dial_buttons[parameter] = box(panel, 520, y - 12, 64, 44, C_TILE, 9);
+        lv_obj_set_clickable(dial_buttons[parameter], true);
+        lv_obj_add_event_cb(dial_buttons[parameter], dial_assign, LV_EVENT_CLICKED, (void *)(intptr_t)parameter);
+        dial_button_labels[parameter] = button_label(dial_buttons[parameter], "DIAL", &lv_font_montserrat_12, C_ACCENT);
     }
     config_status = label(panel, live_mode ? "CONNECTED SETTINGS" : "DEMO MODE  /  NO AUDIO",
-                          30, 353, &lv_font_montserrat_14, C_MUTED);
+                          30, 352, &lv_font_montserrat_12, C_MUTED);
+    lv_obj_set_width(config_status, 410);
+    lv_obj_set_height(config_status, 18);
+    lv_label_set_long_mode(config_status, LV_LABEL_LONG_DOT);
+    lv_obj_t *clear = box(panel, 456, 338, 130, 44, C_TILE, 9);
+    button_label(clear, "CLEAR DIAL", &lv_font_montserrat_12, C_TEXT);
+    lv_obj_set_clickable(clear, true);
+    lv_obj_add_event_cb(clear, dial_clear, LV_EVENT_CLICKED, NULL);
+    config_refresh(NULL);
 }
 
 static void audio_refresh(void)
@@ -792,6 +901,10 @@ static void build_ui(void)
 
     box(screen, 24, 332, 521, 124, C_CARD, 18);
     label(screen, "02  /  PEDAL LIBRARY", 47, 344, &lv_font_montserrat_14, C_MUTED);
+    dial_summary = label(screen, "DIAL / UNASSIGNED", 285, 346, &lv_font_montserrat_12, C_MUTED);
+    lv_obj_set_width(dial_summary, 235);
+    lv_obj_set_height(dial_summary, 18);
+    lv_label_set_long_mode(dial_summary, LV_LABEL_LONG_DOT);
     lv_obj_t * library_button = box(screen, 47, 373, 473, 61, C_TILE, 12);
     lv_obj_set_clickable(library_button, true);
     lv_obj_add_event_cb(library_button, library_open, LV_EVENT_CLICKED, NULL);
@@ -882,6 +995,7 @@ int main(int argc, char ** argv)
     if(show_audio) audio_open(NULL);
     else if(show_tuner) tuner_open(NULL);
     lv_timer_create(tuner_tick, 200, NULL);
+    lv_timer_create(config_refresh, 200, NULL);
     if(live_mode) {
         lv_timer_create(refresh_state, 1000, NULL);
     }
@@ -911,6 +1025,18 @@ int main(int argc, char ** argv)
         lv_obj_send_event(config_sliders[CEILING], LV_EVENT_VALUE_CHANGED, NULL);
         lv_obj_send_event(config_sliders[CEILING], LV_EVENT_RELEASED, NULL);
         if(!read_state() || settings[LIMITER][CEILING] != -6.0f) return 8;
+        lv_obj_send_event(dial_buttons[CEILING], LV_EVENT_CLICKED, NULL);
+        if(!read_state() || strcmp(encoder_pedal, "limiter") || strcmp(encoder_parameter, "ceiling")) return 12;
+        char encoder_reply[32768];
+        if(!command("encoder turn 1", encoder_reply, sizeof(encoder_reply))) return 13;
+        config_refresh(NULL);
+        if(lv_slider_get_value(config_sliders[CEILING]) != -5) return 14;
+        bool limiter_bypass = bypassed[LIMITER], global_enabled = enabled;
+        if(!command("encoder press", encoder_reply, sizeof(encoder_reply)) || !read_state() ||
+           bypassed[LIMITER] == limiter_bypass || enabled != global_enabled) return 15;
+        if(!command("encoder press", encoder_reply, sizeof(encoder_reply))) return 16;
+        dial_clear(NULL);
+        if(!read_state() || encoder_pedal[0]) return 17;
         config_close(NULL);
         lv_timer_handler();
         tuner_open(NULL);
@@ -926,7 +1052,7 @@ int main(int argc, char ** argv)
         if(strcmp(lv_label_get_text(tuner_note_label), "A4") != 0 || lv_obj_get_x(tuner_needle) != 268) return 11;
         tuner_close(NULL);
         lv_timer_handler();
-        puts("Native seven-pedal layout, bypass, octave, limiter and tuner controls passed.");
+        puts("Native layout, bypass, octave, limiter, tuner and encoder assignment/live controls passed.");
         lv_deinit();
         return 0;
     }

@@ -39,6 +39,12 @@ backend has been deployed on the Pi's graphical desktop.
 
 ## Tuner and limiter
 
+The physical encoder on BCM GPIO23/24 can control any pedal parameter. Open a
+pedal's settings and tap **DIAL** beside a parameter; press the GPIO25 button to
+bypass or un-bypass that pedal. **CLEAR DIAL** removes the assignment. See the
+[physical controls guide](../docs/user/physical-controls.md) for wiring, steps,
+startup, and calibration.
+
 Tap **TUNER** beside **AUDIO** to see the clean input note, frequency and cents
 relative to A4 = 440 Hz. The display refreshes five times per second while open.
 Tracking can be switched off independently; opening the tuner keeps audio playing.

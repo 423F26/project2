@@ -86,4 +86,9 @@ The engine socket defaults to `/run/guitar-effect.sock`. Set `PEDAL_CONTROL_SOCK
 ./build/release/pedalctl midi-events
 ```
 
+The desktop launcher also starts the physical encoder controller: BCM GPIO23/24
+for the dial and GPIO25 for its grounded button. Open a pedal's settings and tap
+**DIAL** beside any parameter to assign it; the button toggles bypass for that
+pedal. The assignment restores with the session. See [physical controls](docs/user/physical-controls.md).
+
 `pedal-footswitch` uses `gpiomon` from libgpiod to toggle the effect on GPIO 17. See [tuner and MIDI](docs/user/tuner-midi.md), [LV2 installation and import](docs/user/lv2-plugins.md), [live controls](docs/user/live-effect.md), [C architecture](docs/dev/architecture.md), and [LVGL preview](lvgl_ui/README.md).

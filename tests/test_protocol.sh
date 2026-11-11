@@ -3,6 +3,7 @@ set -euo pipefail
 engine=$1
 control=$2
 web=$3
+encoder=$4
 tmp=$(mktemp -d)
 engine_pid=
 web_pid=
@@ -20,6 +21,40 @@ engine_pid=$!
 for i in {1..100}; do [[ -S $PEDAL_CONTROL_SOCKET ]] && break; sleep .02; done
 [[ -S $PEDAL_CONTROL_SOCKET ]]
 "$control" state | jq -e '.pedals == ["overdrive"] and .enabled == true'
+"$control" encoder assign fuzz drive | jq -e '.encoder.pedal == "fuzz" and .encoder.parameter == "drive" and .encoder.online == false'
+"$control" config fuzz drive 30 >/dev/null
+cat > "$tmp/encoder.events" <<'EVENTS'
+0 1 1 1
+1 0 1 1
+2 1 1 1
+3 0 1 1
+4 0 0 1
+5 1 0 1
+6 1 1 1
+100 1 1 0
+105 1 1 1
+110 1 1 0
+145 1 1 0
+200 1 1 0
+210 1 1 1
+245 1 1 1
+EVENTS
+"$encoder" --replay "$tmp/encoder.events"
+"$control" state | jq -e '.settings.fuzz.drive == 31 and .available.fuzz.bypassed == true and .available.overdrive.bypassed == false and .enabled == true'
+sed -n '1,7p' "$tmp/encoder.events" > "$tmp/turn.events"
+"$encoder" --reverse --replay "$tmp/turn.events"
+"$control" state | jq -e '.settings.fuzz.drive == 30'
+"$encoder" --edges-per-step 2 --replay "$tmp/turn.events"
+"$control" state | jq -e '.settings.fuzz.drive == 32'
+"$control" encoder press >/dev/null
+"$control" encoder heartbeat >/dev/null
+"$control" state | jq -e '.encoder.online == true and .available.fuzz.bypassed == false'
+"$control" encoder disconnect >/dev/null
+for arguments in 'encoder assign fuzz unknown' 'encoder assign fuzz drive extra' 'encoder assign absent drive' 'encoder turn 1.5' 'encoder turn nan' 'encoder turn 1001'; do
+    if "$control" $arguments >"$tmp/invalid" 2>&1; then exit 1; fi
+done
+"$control" encoder clear | jq -e '.encoder.pedal == null and .encoder.online == false'
+if "$control" encoder press >"$tmp/invalid" 2>&1; then exit 1; fi
 "$control" board limiter | jq -e '.pedals == ["limiter"] and .settings.limiter.ceiling == -1'
 "$control" config limiter ceiling -6 | jq -e '.settings.limiter.ceiling == -6'
 "$control" config limiter release 120 | jq -e '.settings.limiter.release == 120'
@@ -58,6 +93,12 @@ jq -e '.pedals == []' "$tmp/state"
 curl -fsS "http://127.0.0.1:$port/" >"$tmp/page"
 grep -q 'Import effect' "$tmp/page"
 curl -fsS "http://127.0.0.1:$port/api/audio" | jq -e '.available | type == "boolean"'
+curl -fsS -H 'Content-Type: application/json' -d '{"pedal":"limiter","parameter":"release"}' "http://127.0.0.1:$port/api/encoder" | jq -e '.encoder.pedal == "limiter" and .encoder.parameter == "release"'
+curl -fsS -H 'Content-Type: application/json' -d '{"clear":true}' "http://127.0.0.1:$port/api/encoder" | jq -e '.encoder.pedal == null'
+for payload in '{"clear":"true"}' '{"clear":false}' '{"pedal":"fuzz","parameter":"missing"}' '{"pedal":"fuzz","parameter":"drive extra"}'; do
+    code=$(curl -sS -o "$tmp/rejected" -w '%{http_code}' -H 'Content-Type: application/json' -d "$payload" "http://127.0.0.1:$port/api/encoder")
+    [[ $code == 400 ]]
+done
 curl -fsS -H 'Content-Type: application/json' -d '{"pedal":"limiter","setting":"ceiling","value":-3}' "http://127.0.0.1:$port/api/config" | jq -e '.settings.limiter.ceiling == -3'
 for payload in '{}' '{"volume_db":1}' '{"volume_db":"0"}' '{"muted":1}' '{"mic_bias":true}' '{"register":2}'; do
   code=$(curl -sS -o "$tmp/rejected" -w '%{http_code}' -H 'Content-Type: application/json' -d "$payload" "http://127.0.0.1:$port/api/audio")

@@ -2,6 +2,7 @@
 
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define CORE "http://lv2plug.in/ns/lv2core#"
@@ -122,6 +123,15 @@ bool lv2_load(Engine *engine, const char *uri, char *error, size_t error_size)
             ControlPort *target = &pedal->controls[pedal->control_count++];
             target->index = i;
             target->input = lilv_port_is_a(plugin, port, input);
+            LilvNode *integer = lilv_new_uri(engine->world, CORE "integer");
+            LilvNode *toggled = lilv_new_uri(engine->world, CORE "toggled");
+            LilvNode *enumeration = lilv_new_uri(engine->world, CORE "enumeration");
+            target->integer = lilv_port_has_property(plugin, port, integer);
+            target->toggled = lilv_port_has_property(plugin, port, toggled);
+            target->enumeration = lilv_port_has_property(plugin, port, enumeration);
+            lilv_node_free(integer);
+            lilv_node_free(toggled);
+            lilv_node_free(enumeration);
             const LilvNode *symbol = lilv_port_get_symbol(plugin, port);
             snprintf(target->symbol, sizeof(target->symbol), "%s", lilv_node_as_string(symbol));
             LilvNode *def = NULL, *min = NULL, *max = NULL;
@@ -149,6 +159,50 @@ bool lv2_load(Engine *engine, const char *uri, char *error, size_t error_size)
     lilv_instance_activate(pedal->instance);
     engine->pedal_count++;
     return true;
+}
+
+static int compare_value(const void *a, const void *b)
+{
+    double left = *(const double *)a, right = *(const double *)b;
+    return (left > right) - (left < right);
+}
+
+bool lv2_encoder_choice(Pedal *pedal, ControlPort *port, int steps, double *value)
+{
+    if(!steps) { *value = port->value; return true; }
+    const LilvPort *source = lilv_plugin_get_port_by_index(pedal->plugin, port->index);
+    LilvScalePoints *points = lilv_port_get_scale_points(pedal->plugin, source);
+    size_t count = points ? lilv_scale_points_size(points) : 0;
+    double *choices = count ? calloc(count, sizeof(*choices)) : NULL;
+    size_t used = 0;
+    if(choices) {
+        LILV_FOREACH(scale_points, i, points) {
+            double candidate = lilv_node_as_float(lilv_scale_point_get_value(lilv_scale_points_get(points, i)));
+            if(isfinite(candidate) && (!port->has_minimum || candidate >= port->minimum) &&
+               (!port->has_maximum || candidate <= port->maximum)) choices[used++] = candidate;
+        }
+        qsort(choices, used, sizeof(*choices), compare_value);
+        size_t unique = 0;
+        for(size_t i = 0; i < used; ++i)
+            if(!unique || choices[i] != choices[unique - 1]) choices[unique++] = choices[i];
+        used = unique;
+        long index;
+        if(steps > 0) {
+            index = 0;
+            while(index < (long)used && choices[index] <= port->value) index++;
+            index += steps - 1;
+        } else {
+            index = (long)used - 1;
+            while(index >= 0 && choices[index] >= port->value) index--;
+            index += steps + 1;
+        }
+        if(index < 0) index = 0;
+        if(index >= (long)used) index = (long)used - 1;
+        if(used) *value = choices[index];
+    }
+    free(choices);
+    if(points) lilv_scale_points_free(points);
+    return used > 0;
 }
 
 void lv2_process(Engine *engine, Pedal *pedal, const int16_t *input, int16_t *output, size_t count)
