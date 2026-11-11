@@ -16543,7 +16543,7 @@
 			)
 		)
 		(property "Value" "10uf16v"
-			(at 105.791 72.263 0)
+			(at 89.662 71.374 0)
 			(effects
 				(font
 					(size 1.27 1.27)
