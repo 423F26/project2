@@ -95,7 +95,7 @@ directions open at 48000 Hz, S16_LE, two channels, 128-frame hardware periods,
 and 512-frame hardware buffers.
 
 Runtime logs: `/home/pi/.cache/ml-guitar-pedal/launcher.log`.
-Launcher backup: `/home/pi/project2/run-pedal.sh.before-adac-20261111-103502`.
+Launcher backup: `/home/pi/.cache/ml-guitar-pedal/run-pedal.sh.before-adac-20261111-103502`.
 
 ## Mixer baseline
 
@@ -126,6 +126,8 @@ outputs; these connections must remain consistent with its design.
   the tests, and captured samples were discarded.
 - A second reboot confirmed automatic sound-card detection, microphone bias off,
   ADC gain 0 dB, DAC volume -30 dB, and desktop automatic login.
+- The installed desktop shortcut was launched successfully, and a further reboot
+  confirmed the XDG autostart entry opens the current native UI and ADAC engine.
 
 These checks establish driver binding and digital streaming, not analogue
 input/output quality, measured latency, or electrical validation of the assembled
