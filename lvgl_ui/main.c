@@ -1,4 +1,6 @@
 #include <lvgl/lvgl.h>
+#include <SDL.h>
+#include <json-c/json.h>
 
 #include <math.h>
 #include <stdbool.h>
@@ -24,13 +26,16 @@
 #define C_ACCENT 0x43E0A0
 #define C_GOLD 0xF0B968
 
-enum { OVERDRIVE, FUZZ, DELAY, TREMOLO, CHORUS, PEDAL_COUNT };
-static const char * pedal_names[PEDAL_COUNT] = {"overdrive", "fuzz", "delay", "tremolo", "chorus"};
-static const char * pedal_titles[PEDAL_COUNT] = {"OVERDRIVE", "FUZZ", "DELAY", "TREMOLO", "CHORUS"};
-static const char * pedal_details[PEDAL_COUNT] = {"WARM DRIVE", "HARD CLIP", "ECHO", "PULSE", "MODULATE"};
-static const uint32_t pedal_colors[PEDAL_COUNT] = {C_ACCENT, C_GOLD, 0x85B6FA, 0xD8A7F2, 0xF59E9E};
-static const uint32_t pedal_bodies[PEDAL_COUNT] = {0x1D3940, 0x3B3428, 0x26374B, 0x382E4A, 0x3D3038};
+enum { OVERDRIVE, FUZZ, DELAY, TREMOLO, CHORUS, OCTAVE, PEDAL_COUNT };
+static const char * pedal_names[PEDAL_COUNT] = {"overdrive", "fuzz", "delay", "tremolo", "chorus", "octave"};
+static const char * pedal_titles[PEDAL_COUNT] = {"OVERDRIVE", "FUZZ", "DELAY", "TREMOLO", "CHORUS", "OCTAVE"};
+static const char * pedal_details[PEDAL_COUNT] = {"WARM DRIVE", "HARD CLIP", "ECHO", "PULSE", "MODULATE", "PITCH SHIFT"};
+static const uint32_t pedal_colors[PEDAL_COUNT] = {C_ACCENT, C_GOLD, 0x85B6FA, 0xD8A7F2, 0xF59E9E, 0xB9B0FF};
+static const uint32_t pedal_bodies[PEDAL_COUNT] = {0x1D3940, 0x3B3428, 0x26374B, 0x382E4A, 0x3D3038, 0x302D46};
 static bool live_mode;
+static bool ui_running = true;
+static bool bypassed[PEDAL_COUNT];
+static lv_obj_t *led_buttons[PEDAL_COUNT];
 static bool enabled = true;
 static int amount = 65;
 static int slots[PEDAL_COUNT] = {OVERDRIVE};
@@ -53,22 +58,23 @@ static lv_obj_t * slider;
 static lv_obj_t * amount_label;
 static lv_obj_t * config_overlay;
 static lv_obj_t * library_overlay;
-static lv_obj_t * config_values[8];
-static lv_obj_t * config_sliders[8];
+static lv_obj_t * config_values[9];
+static lv_obj_t * config_sliders[9];
 static lv_obj_t * config_status;
 static int config_pedal = -1;
 enum { DRIVE, TONE, MIX, LEVEL };
-enum { TIME = 4, FEEDBACK, RATE, DEPTH, PARAMETER_COUNT };
-static const char * parameter_names[PARAMETER_COUNT] = {"drive", "tone", "mix", "level", "time", "feedback", "rate", "depth"};
+enum { TIME = 4, FEEDBACK, RATE, DEPTH, PITCH, PARAMETER_COUNT };
+static const char * parameter_names[PARAMETER_COUNT] = {"drive", "tone", "mix", "level", "time", "feedback", "rate", "depth", "pitch"};
 static const int pedal_parameters[PEDAL_COUNT][4] = {
     {DRIVE, TONE, MIX, LEVEL}, {DRIVE, TONE, LEVEL, -1},
-    {TIME, FEEDBACK, MIX, -1}, {RATE, DEPTH, -1, -1}, {RATE, DEPTH, MIX, -1}
+    {TIME, FEEDBACK, MIX, -1}, {RATE, DEPTH, -1, -1}, {RATE, DEPTH, MIX, -1}, {PITCH, MIX, -1, -1}
 };
 static float settings[PEDAL_COUNT][PARAMETER_COUNT] = {
     {20.0f, 3000.0f, 1.0f, 0.5f}, {15.0f, 2500.0f, 0.0f, 0.45f},
     {[TIME] = 300.0f, [FEEDBACK] = 0.35f, [MIX] = 0.35f},
     {[RATE] = 5.0f, [DEPTH] = 0.7f},
-    {[RATE] = 1.2f, [DEPTH] = 0.5f, [MIX] = 0.5f}
+    {[RATE] = 1.2f, [DEPTH] = 0.5f, [MIX] = 0.5f},
+    {[PITCH] = .5f, [MIX] = .65f}
 };
 
 static void refresh_state(lv_timer_t * timer);
@@ -136,59 +142,38 @@ static bool command(const char * request, char * reply, size_t reply_size)
 
 static bool read_state(void)
 {
-    char reply[8192];
+    char reply[32768];
     if(!command("state", reply, sizeof(reply))) return false;
-    const char * enabled_value = strstr(reply, "\"enabled\":");
-    const char * amount_value = strstr(reply, "\"amount\":");
-    const char * pedal_value = strstr(reply, "\"pedals\":");
-    if(!enabled_value || !amount_value || !pedal_value) return false;
-
-    enabled_value = strchr(enabled_value, ':') + 1;
-    while(*enabled_value == ' ') enabled_value++;
-    if(strncmp(enabled_value, "true", 4) != 0 && strncmp(enabled_value, "false", 5) != 0) return false;
-    enabled = strncmp(enabled_value, "true", 4) == 0;
-    amount = (int)lround(strtod(strchr(amount_value, ':') + 1, NULL) * 100.0);
-    if(amount < 0) amount = 0;
-    if(amount > 100) amount = 100;
-
-    const char * start = strchr(pedal_value, '[');
-    const char * end = start ? strchr(start, ']') : NULL;
-    if(!end) return false;
+    json_object *root = json_tokener_parse(reply);
+    if(!root) return false;
+    json_object *board = json_object_object_get(root, "pedals");
+    if(!board || !json_object_is_type(board, json_type_array)) { json_object_put(root); return false; }
+    enabled = json_object_get_boolean(json_object_object_get(root, "enabled"));
+    amount = (int)lround(100 * json_object_get_double(json_object_object_get(root, "amount")));
     active_count = 0;
     view_only = false;
-    for(const char * cursor = start + 1; cursor < end;) {
-        const char * open = memchr(cursor, '"', (size_t)(end - cursor));
-        if(!open) break;
-        const char * close = memchr(open + 1, '"', (size_t)(end - open - 1));
-        if(!close) return false;
+    for(size_t i = 0; i < json_object_array_length(board); ++i) {
+        const char *name = json_object_get_string(json_object_array_get_idx(board, i));
         int found = -1;
-        for(int pedal = 0; pedal < PEDAL_COUNT; ++pedal) {
-            size_t length = strlen(pedal_names[pedal]);
-            if((size_t)(close - open - 1) == length && strncmp(open + 1, pedal_names[pedal], length) == 0)
-                found = pedal;
-        }
+        for(int pedal = 0; pedal < PEDAL_COUNT; ++pedal)
+            if(name && strcmp(name, pedal_names[pedal]) == 0) found = pedal;
         if(found < 0 || active_count == PEDAL_COUNT) view_only = true;
         else slots[active_count++] = found;
-        cursor = close + 1;
     }
-
-    const char * config = strstr(reply, "\"settings\":");
-    if(config) {
-        for(int pedal = 0; pedal < PEDAL_COUNT; ++pedal) {
-            const char * section = strstr(config, pedal_names[pedal]);
-            const char * open = section ? strchr(section, '{') : NULL;
-            const char * close = open ? strchr(open, '}') : NULL;
-            if(!close) continue;
-            for(int index = 0; index < 4 && pedal_parameters[pedal][index] >= 0; ++index) {
-                int parameter = pedal_parameters[pedal][index];
-                char key[20];
-                snprintf(key, sizeof(key), "\"%s\"", parameter_names[parameter]);
-                const char * field = strstr(open, key);
-                if(field && field < close)
-                    settings[pedal][parameter] = (float)strtod(strchr(field, ':') + 1, NULL);
-            }
+    json_object *all = json_object_object_get(root, "settings");
+    json_object *available = json_object_object_get(root, "available");
+    for(int pedal = 0; pedal < PEDAL_COUNT; ++pedal) {
+        json_object *info = available ? json_object_object_get(available, pedal_names[pedal]) : NULL;
+        bypassed[pedal] = info && json_object_get_boolean(json_object_object_get(info, "bypassed"));
+        json_object *values = all ? json_object_object_get(all, pedal_names[pedal]) : NULL;
+        for(int index = 0; values && index < 4 && pedal_parameters[pedal][index] >= 0; ++index) {
+            int parameter = pedal_parameters[pedal][index];
+            json_object *value;
+            if(json_object_object_get_ex(values, parameter_names[parameter], &value))
+                settings[pedal][parameter] = (float)json_object_get_double(value);
         }
     }
+    json_object_put(root);
     return true;
 }
 
@@ -209,7 +194,7 @@ static void render_board(void)
     strcat(path, "  >  OUTPUT");
     lv_label_set_text(path_label, path);
 
-    int width = active_count <= 4 ? 164 : 130;
+    int width = active_count <= 4 ? 164 : active_count == 5 ? 130 : 112;
     int gap = active_count <= 4 ? 12 : 10;
     int total = active_count * width + (active_count ? active_count - 1 : 0) * gap;
     int left = 400 - total / 2;
@@ -222,11 +207,14 @@ static void render_board(void)
         lv_obj_set_hidden(tiles[pedal], false);
         lv_obj_set_pos(tiles[pedal], left + index * (width + gap), 169);
         lv_obj_set_size(tiles[pedal], width, 100);
-        lv_obj_set_style_bg_color(tiles[pedal], color(pedal_bodies[pedal]), 0);
+        lv_obj_set_style_bg_color(tiles[pedal], color(bypassed[pedal] ? C_CARD : pedal_bodies[pedal]), 0);
         lv_label_set_text(tile_details[pedal], pedal_details[pedal]);
-        lv_obj_set_pos(gear_buttons[pedal], width - 42, 6);
-        lv_obj_set_size(gear_buttons[pedal], 36, 36);
-        lv_obj_set_pos(tile_leds[pedal], width - 25, 72);
+        lv_obj_set_pos(gear_buttons[pedal], width - 38, 62);
+        lv_obj_set_size(gear_buttons[pedal], 30, 30);
+        lv_obj_set_pos(led_buttons[pedal], width - 38, 2);
+        lv_obj_set_style_bg_color(tile_leds[pedal], color(bypassed[pedal] ? C_MUTED : pedal_colors[pedal]), 0);
+        lv_obj_set_style_shadow_opa(tile_leds[pedal], bypassed[pedal] ? LV_OPA_TRANSP : LV_OPA_30, 0);
+        lv_obj_set_width(tile_details[pedal], width - 48);
     }
 
     lv_obj_set_style_bg_color(mode_button, color(enabled ? C_ACCENT : C_TILE), 0);
@@ -235,6 +223,20 @@ static void render_board(void)
     lv_label_set_text_fmt(amount_label, "MIX  %d%%", amount);
     lv_slider_set_value(slider, amount, LV_ANIM_OFF);
 }
+
+static void bypass_clicked(lv_event_t *event)
+{
+    int pedal = (int)(intptr_t)lv_event_get_user_data(event);
+    bypassed[pedal] = !bypassed[pedal];
+    if(live_mode) {
+        char request[80], reply[32768];
+        snprintf(request, sizeof(request), "bypass %s %s", pedal_names[pedal], bypassed[pedal] ? "on" : "off");
+        if(!command(request, reply, sizeof(reply)) || !read_state()) show_status("COULD NOT CHANGE BYPASS", C_GOLD);
+    }
+    render_board();
+}
+
+static void exit_clicked(lv_event_t *event) { (void)event; ui_running = false; }
 
 static void send_board(void)
 {
@@ -389,6 +391,7 @@ static void slider_released(lv_event_t * event)
 static int config_slider_value(int pedal, int parameter)
 {
     float value = settings[pedal][parameter];
+    if(parameter == PITCH) return value < .75f ? -1 : value > 1.5f ? 1 : 0;
     int scale = parameter == RATE ? 10 :
                 parameter == MIX || parameter == LEVEL || parameter == FEEDBACK || parameter == DEPTH ? 100 : 1;
     return (int)lroundf(value * scale);
@@ -396,7 +399,8 @@ static int config_slider_value(int pedal, int parameter)
 
 static void format_config_value(int parameter, int value, char * text, size_t size)
 {
-    if(parameter == TONE) snprintf(text, size, "%d Hz", value);
+    if(parameter == PITCH) snprintf(text, size, "%s", value < 0 ? "DOWN" : value > 0 ? "UP" : "NORMAL");
+    else if(parameter == TONE) snprintf(text, size, "%d Hz", value);
     else if(parameter == TIME) snprintf(text, size, "%d ms", value);
     else if(parameter == RATE) snprintf(text, size, "%.1f Hz", value / 10.0f);
     else if(parameter == DRIVE) snprintf(text, size, "%dx", value);
@@ -408,7 +412,7 @@ static void config_changed(lv_event_t * event)
     int parameter = (int)(intptr_t)lv_event_get_user_data(event);
     if(config_pedal < 0) return;
     int value = lv_slider_get_value(config_sliders[parameter]);
-    settings[config_pedal][parameter] = parameter == RATE ? value / 10.0f :
+    settings[config_pedal][parameter] = parameter == PITCH ? (value < 0 ? .5f : value > 0 ? 2.0f : 1.0f) : parameter == RATE ? value / 10.0f :
         parameter == MIX || parameter == LEVEL || parameter == FEEDBACK || parameter == DEPTH ? value / 100.0f : (float)value;
     char text[24];
     format_config_value(parameter, value, text, sizeof(text));
@@ -461,7 +465,7 @@ static void config_open(lv_event_t * event)
     lv_obj_t * close_icon = label(close, LV_SYMBOL_CLOSE, 0, 0, &lv_font_montserrat_20, C_TEXT);
     lv_obj_center(close_icon);
 
-    const char * titles[PARAMETER_COUNT] = {"DRIVE", "TONE", "MIX", "LEVEL", "TIME", "FEEDBACK", "RATE", "DEPTH"};
+    const char * titles[PARAMETER_COUNT] = {"DRIVE", "TONE", "MIX", "LEVEL", "TIME", "FEEDBACK", "RATE", "DEPTH", "OCTAVE"};
     int rows = 0;
     while(rows < 4 && pedal_parameters[pedal][rows] >= 0) rows++;
     for(int row = 0; row < rows; ++row) {
@@ -475,6 +479,7 @@ static void config_open(lv_event_t * event)
         int minimum = parameter == DRIVE ? 1 : parameter == TONE ? 100 : parameter == TIME ? 20 : parameter == RATE ? 1 : 0;
         int maximum = parameter == DRIVE ? 100 : parameter == TONE ? 8000 : parameter == TIME ? 1500 :
                       parameter == RATE ? (pedal == CHORUS ? 50 : 200) : parameter == FEEDBACK ? 90 : 100;
+        if(parameter == PITCH) { minimum = -1; maximum = 1; }
         lv_slider_set_range(control, minimum, maximum);
         lv_obj_set_style_bg_color(control, color(C_LINE), LV_PART_MAIN);
         lv_obj_set_style_bg_color(control, color(pedal_colors[pedal]), LV_PART_INDICATOR);
@@ -513,12 +518,17 @@ static void build_ui(void)
     box(screen, 24, 20, 42, 42, C_ACCENT, 12);
     label(screen, "P", 37, 23, &lv_font_montserrat_28, C_BG);
     label(screen, "PEDAL / LAB", 80, 25, &lv_font_montserrat_20, C_TEXT);
-    label(screen, "SIGNAL GRAPH", 632, 31, &lv_font_montserrat_14, C_MUTED);
+    lv_obj_t *exit_button = box(screen, 710, 20, 66, 42, C_TILE, 10);
+    lv_obj_set_clickable(exit_button, true);
+    lv_obj_add_event_cb(exit_button, exit_clicked, LV_EVENT_CLICKED, NULL);
+    label(exit_button, "EXIT", 12, 12, &lv_font_montserrat_14, C_TEXT);
     box(screen, 24, 75, 752, 1, C_LINE, 0);
 
     box(screen, 24, 90, 752, 229, C_CARD, 20);
     label(screen, "01  /  PEDAL BOARD", 47, 108, &lv_font_montserrat_14, C_ACCENT);
     path_label = label(screen, "INPUT  >  OVERDRIVE  >  OUTPUT", 47, 133, &lv_font_montserrat_14, C_MUTED);
+    lv_obj_set_width(path_label, 706);
+    lv_label_set_long_mode(path_label, LV_LABEL_LONG_DOT);
     box(screen, 98, 216, 602, 3, C_LINE, 2);
     box(screen, 46, 185, 76, 65, C_TILE, 13);
     label(screen, "IN", 69, 203, &lv_font_montserrat_20, C_ACCENT);
@@ -562,9 +572,15 @@ static void build_ui(void)
         lv_obj_add_event_cb(tiles[pedal], tile_event, LV_EVENT_PRESSING, (void *)(intptr_t)pedal);
         lv_obj_add_event_cb(tiles[pedal], tile_event, LV_EVENT_RELEASED, (void *)(intptr_t)pedal);
         box(tiles[pedal], 0, 0, 6, 100, pedal_colors[pedal], 3);
-        label(tiles[pedal], pedal_titles[pedal], 8, 13, &lv_font_montserrat_14, C_TEXT);
-        tile_details[pedal] = label(tiles[pedal], pedal_details[pedal], 8, 48, &lv_font_montserrat_14, C_MUTED);
-        tile_leds[pedal] = box(tiles[pedal], 139, 72, 12, 12, pedal_colors[pedal], 6);
+        label(tiles[pedal], pedal_titles[pedal], 8, 36, &lv_font_montserrat_14, C_TEXT);
+        tile_details[pedal] = label(tiles[pedal], pedal_details[pedal], 8, 68, &lv_font_montserrat_14, C_MUTED);
+        lv_label_set_long_mode(tile_details[pedal], LV_LABEL_LONG_DOT);
+        lv_obj_set_height(tile_details[pedal], 18);
+        led_buttons[pedal] = box(tiles[pedal], 122, 2, 36, 34, pedal_bodies[pedal], 8);
+        lv_obj_set_style_bg_opa(led_buttons[pedal], LV_OPA_TRANSP, 0);
+        lv_obj_set_clickable(led_buttons[pedal], true);
+        lv_obj_add_event_cb(led_buttons[pedal], bypass_clicked, LV_EVENT_CLICKED, (void *)(intptr_t)pedal);
+        tile_leds[pedal] = box(led_buttons[pedal], 13, 12, 10, 10, pedal_colors[pedal], 5);
         lv_obj_set_style_shadow_color(tile_leds[pedal], color(pedal_colors[pedal]), 0);
         lv_obj_set_style_shadow_width(tile_leds[pedal], 12, 0);
         lv_obj_set_style_shadow_opa(tile_leds[pedal], LV_OPA_70, 0);
@@ -583,11 +599,14 @@ static void build_ui(void)
 
 int main(int argc, char ** argv)
 {
-    if(argc > 2 || (argc == 2 && strcmp(argv[1], "--live") != 0)) {
-        fprintf(stderr, "Usage: %s [--live]\n", argv[0]);
-        return 2;
+    bool fullscreen = false;
+    bool self_test = false;
+    for(int i = 1; i < argc; ++i) {
+        if(strcmp(argv[i], "--live") == 0) live_mode = true;
+        else if(strcmp(argv[i], "--fullscreen") == 0) fullscreen = true;
+        else if(strcmp(argv[i], "--self-test") == 0) self_test = true;
+        else { fprintf(stderr, "Usage: %s [--live] [--fullscreen]\n", argv[0]); return 2; }
     }
-    live_mode = argc == 2;
     lv_init();
     lv_display_t * display = lv_sdl_window_create(WIDTH, HEIGHT);
     if(!display) {
@@ -595,6 +614,9 @@ int main(int argc, char ** argv)
         return 1;
     }
     lv_sdl_window_set_title(display, "Pedal / Lab — LVGL pedal board");
+    if(fullscreen && SDL_SetWindowFullscreen(lv_sdl_window_get_window(display), SDL_WINDOW_FULLSCREEN_DESKTOP) != 0) {
+        fprintf(stderr, "Fullscreen: %s\n", SDL_GetError()); return 1;
+    }
     lv_sdl_mouse_create();
     lv_sdl_keyboard_create();
     build_ui();
@@ -602,8 +624,36 @@ int main(int argc, char ** argv)
         refresh_state(NULL);
         lv_timer_create(refresh_state, 1000, NULL);
     }
-    while(true) {
+    if(self_test) {
+        if(!live_mode || !read_state() || view_only || active_count != PEDAL_COUNT) return 3;
+        render_board();
+        lv_obj_update_layout(lv_screen_active());
+        for(int pedal = 0; pedal < PEDAL_COUNT; ++pedal)
+            if(lv_obj_get_x(tiles[pedal]) < 24 || lv_obj_get_x(tiles[pedal])+lv_obj_get_width(tiles[pedal]) > 776) return 4;
+        bool original_bypass = bypassed[OCTAVE];
+        lv_obj_send_event(led_buttons[OCTAVE], LV_EVENT_CLICKED, NULL);
+        if(!read_state() || bypassed[OCTAVE] == original_bypass) return 5;
+        lv_obj_send_event(led_buttons[OCTAVE], LV_EVENT_CLICKED, NULL);
+        lv_obj_send_event(gear_buttons[OCTAVE], LV_EVENT_CLICKED, NULL);
+        lv_slider_set_value(config_sliders[PITCH], 1, LV_ANIM_OFF);
+        lv_obj_send_event(config_sliders[PITCH], LV_EVENT_VALUE_CHANGED, NULL);
+        lv_obj_send_event(config_sliders[PITCH], LV_EVENT_RELEASED, NULL);
+        if(!read_state() || settings[OCTAVE][PITCH] != 2.0f) return 6;
+        lv_slider_set_value(config_sliders[PITCH], -1, LV_ANIM_OFF);
+        lv_obj_send_event(config_sliders[PITCH], LV_EVENT_VALUE_CHANGED, NULL);
+        lv_obj_send_event(config_sliders[PITCH], LV_EVENT_RELEASED, NULL);
+        if(!read_state() || settings[OCTAVE][PITCH] != .5f) return 7;
+        config_close(NULL);
+        lv_timer_handler();
+        puts("Native six-pedal layout, bypass button and octave controls passed.");
+        lv_deinit();
+        return 0;
+    }
+    while(ui_running) {
         uint32_t delay = lv_timer_handler();
+        if(SDL_GetKeyboardState(NULL)[SDL_SCANCODE_ESCAPE]) break;
         lv_sleep_ms(delay > 20 ? 20 : delay);
     }
+    lv_deinit();
+    return 0;
 }

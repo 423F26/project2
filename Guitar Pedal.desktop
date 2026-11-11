@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Guitar Pedal
+Comment=Start guitar audio and the native pedal board
+Exec=/home/pi/project2/run-pedal.sh
+Path=/home/pi/project2
+Icon=audio-input-microphone
+Terminal=false
+StartupNotify=false
+Categories=AudioVideo;Audio;

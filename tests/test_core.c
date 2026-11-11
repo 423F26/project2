@@ -54,7 +54,24 @@ int main(void)
         engine->target = 1;
         for(int i = 0; i < 6; ++i) engine_process(engine, input, output, 128);
         assert(output[0] != input[0]);
+        assert(engine_set_bypass(engine, &engine->pedals[pedal], true));
+        assert(engine->transition);
+        for(int i = 0; i < 5; ++i) engine_process(engine, input, output, 128);
+        assert(memcmp(input, output, sizeof(input)) == 0);
+        assert(engine->active_count == 1 && engine->active[0] == pedal);
+        assert(engine_set_bypass(engine, &engine->pedals[pedal], true));
+        assert(!engine->transition);
+        assert(engine_set_bypass(engine, &engine->pedals[pedal], false));
+        for(int i = 0; i < 5; ++i) engine_process(engine, input, output, 128);
+        assert(output[0] != input[0]);
     }
+    assert(!engine_set_bypass(engine, NULL, true));
+    assert(engine_set_bypass(engine, &engine->pedals[0], true));
+    assert(engine_set_board(engine, (size_t[]){1, 0, 2}, 3));
+    assert(engine->pedals[0].bypassed);
+    assert(engine_config(engine, &engine->pedals[0], "drive", 30));
+    assert(engine->pedals[0].bypassed && engine->pedals[0].drive == 30);
+    assert(engine_set_bypass(engine, &engine->pedals[0], false));
     engine->enabled = false;
     engine->target = 0;
     for(int i = 0; i < 5; ++i) engine_process(engine, input, output, 128);
@@ -73,6 +90,12 @@ int main(void)
     assert(output[0] > 4500 && output[0] < 5500);
     assert(!engine_config(engine, &engine->pedals[5], "gain", 2));
     assert(engine_config(engine, &engine->pedals[5], "gain", .25));
+    for(int i = 0; i < 5; ++i) engine_process(engine, input, output, 128);
+    assert(output[0] > 2000 && output[0] < 3000);
+    assert(engine_set_bypass(engine, &engine->pedals[5], true));
+    for(int i = 0; i < 5; ++i) engine_process(engine, input, output, 128);
+    assert(memcmp(input, output, sizeof(input)) == 0);
+    assert(engine_set_bypass(engine, &engine->pedals[5], false));
     for(int i = 0; i < 5; ++i) engine_process(engine, input, output, 128);
     assert(output[0] > 2000 && output[0] < 3000);
     size_t leave_plugin[] = {2};

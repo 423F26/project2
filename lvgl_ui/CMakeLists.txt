@@ -26,6 +26,10 @@ FetchContent_Declare(lvgl
 )
 FetchContent_MakeAvailable(lvgl)
 
+find_package(SDL2 REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(JSONC REQUIRED IMPORTED_TARGET json-c)
+
 add_executable(pedal-lvgl main.c)
-target_link_libraries(pedal-lvgl PRIVATE lvgl::lvgl m)
+target_link_libraries(pedal-lvgl PRIVATE lvgl::lvgl SDL2::SDL2 PkgConfig::JSONC m)
 target_compile_options(pedal-lvgl PRIVATE -Wall -Wextra -Wpedantic)

@@ -149,6 +149,18 @@ bool engine_set_board(Engine *engine, const size_t *indices, size_t count)
     return true;
 }
 
+bool engine_set_bypass(Engine *engine, Pedal *pedal, bool bypassed)
+{
+    if(!pedal) return false;
+    if(pedal->bypassed == bypassed) return true;
+    bool active = false;
+    for(size_t i = 0; i < engine->active_count; ++i)
+        if(pedal == &engine->pedals[engine->active[i]]) active = true;
+    if(active && engine->wet > 0 && !snapshot(engine)) return false;
+    pedal->bypassed = bypassed;
+    return true;
+}
+
 static bool builtin_parameter(Pedal *pedal, const char *name, double value, int rate, double **field)
 {
     double minimum = 0, maximum = 1;
@@ -177,7 +189,10 @@ bool engine_config(Engine *engine, Pedal *pedal, const char *name, double value)
     if(!pedal || !isfinite(value)) return false;
     double *field = NULL;
     ControlPort *port = NULL;
-    if(pedal->kind == LV2) {
+    if(strcmp(pedal->id, "octave") == 0 && strcmp(name, "mix") == 0) {
+        if(value < 0 || value > 1) return false;
+        field = &pedal->mix;
+    } else if(pedal->kind == LV2) {
         for(size_t i = 0; i < pedal->control_count; ++i)
             if(pedal->controls[i].input && strcmp(pedal->controls[i].symbol, name) == 0) port = &pedal->controls[i];
         if(!port || (port->has_minimum && value < port->minimum) ||
@@ -262,7 +277,8 @@ static void process_chain(Engine *engine, Pedal *pedals, const size_t *indices, 
     for(size_t i = 0; i < count; ++i) {
         int16_t *destination = i == count - 1 ? output : (i & 1 ? engine->scratch_b : engine->scratch_a);
         Pedal *pedal = previous ? &pedals[i] : &pedals[indices[i]];
-        if(pedal->kind == LV2) lv2_process(engine, pedal, source, destination, frames);
+        if(pedal->bypassed) memmove(destination, source, frames * sizeof(*destination));
+        else if(pedal->kind == LV2) lv2_process(engine, pedal, source, destination, frames);
         else process_builtin(engine, pedal, source, destination, frames);
         source = destination;
     }

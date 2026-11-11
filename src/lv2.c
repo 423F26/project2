@@ -95,10 +95,20 @@ bool lv2_load(Engine *engine, const char *uri, char *error, size_t error_size)
     pedal->kind = LV2;
     pedal->sample_rate = engine->rate;
     pedal->plugin = plugin;
-    snprintf(pedal->id, sizeof(pedal->id), "lv2-%zu", engine->pedal_count - 4);
+    bool octave = strcmp(uri, OCTAVE_URI) == 0;
+    if(octave) {
+        strcpy(pedal->id, "octave");
+        pedal->mix = .65;
+    } else {
+        size_t serial = 1;
+        for(size_t i = 5; i < engine->pedal_count; ++i)
+            if(strncmp(engine->pedals[i].id, "lv2-", 4) == 0) serial++;
+        snprintf(pedal->id, sizeof(pedal->id), "lv2-%zu", serial);
+    }
     snprintf(pedal->uri, sizeof(pedal->uri), "%s", uri);
     LilvNode *plugin_name = lilv_plugin_get_name(plugin);
     snprintf(pedal->name, sizeof(pedal->name), "%s", plugin_name ? lilv_node_as_string(plugin_name) : uri);
+    if(octave) strcpy(pedal->name, "Octave");
     if(plugin_name) lilv_node_free(plugin_name);
     LilvNode *audio = lilv_new_uri(engine->world, CORE "AudioPort");
     LilvNode *control = lilv_new_uri(engine->world, CORE "ControlPort");
@@ -121,6 +131,7 @@ bool lv2_load(Engine *engine, const char *uri, char *error, size_t error_size)
             if(min) target->minimum = lilv_node_as_float(min);
             if(max) target->maximum = lilv_node_as_float(max);
             target->value = def ? lilv_node_as_float(def) : (min ? target->minimum : 0);
+            if(octave && strcmp(target->symbol, "pitch") == 0) target->value = .5f;
             if(def) lilv_node_free(def);
             if(min) lilv_node_free(min);
             if(max) lilv_node_free(max);
@@ -142,12 +153,15 @@ bool lv2_load(Engine *engine, const char *uri, char *error, size_t error_size)
 
 void lv2_process(Engine *engine, Pedal *pedal, const int16_t *input, int16_t *output, size_t count)
 {
+    bool octave = strcmp(pedal->id, "octave") == 0;
     for(size_t i = 0; i < count; ++i) engine->lv2_in[i] = (float)input[i] / 32768.0f;
     lilv_instance_connect_port(pedal->instance, pedal->audio_in, engine->lv2_in);
     lilv_instance_connect_port(pedal->instance, pedal->audio_out, engine->lv2_out);
     lilv_instance_run(pedal->instance, (uint32_t)count);
     for(size_t i = 0; i < count; ++i) {
         double sample = nearbyint(engine->lv2_out[i] * 32767.0);
+        if(octave)
+            sample = nearbyint(input[i] * (1 - pedal->mix) + sample * pedal->mix);
         if(!isfinite(sample)) sample = 0;
         if(sample > 32767) sample = 32767;
         if(sample < -32768) sample = -32768;
